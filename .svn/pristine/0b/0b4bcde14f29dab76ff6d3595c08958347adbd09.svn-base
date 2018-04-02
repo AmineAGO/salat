@@ -1,0 +1,2382 @@
+CREATE OR REPLACE PACKAGE BODY PKCOMMANDE IS
+
+  -- Statut de la commande
+  STATUT_CREE_1      CONSTANT NUMBER := 1;
+  STATUT_CONFIRMEE_2 CONSTANT NUMBER := 2;
+
+  ARRONDIS     CONSTANT NUMBER := 2;
+  TYPE_REM_DET CONSTANT NUMBER := 3;
+  TYPE_REM_GLO CONSTANT NUMBER := 4;
+
+  -- type de remise
+  R_POURCENTAGE CONSTANT NUMBER := 1;
+  R_MONNAIE     CONSTANT NUMBER := 2;
+  R_GRATUIT     CONSTANT NUMBER := 3;
+
+  FRANCO_R   NUMBER := 160;
+  FRANCO_NR  NUMBER := 60;
+  ------------------------------------------------------------------------
+  --  PROTOTYPES
+  --
+  ------------------------------------------------------------------------
+  PROCEDURE INSERT_PANIER(I_TIERCOM IN NUMBER,
+                          I_TIERFOU IN NUMBER,
+                          I_PRODUIT IN NUMBER,
+                          I_QUANTI  IN NUMBER,
+                          I_UTIL    IN NUMBER) IS
+    O_RET   NUMBER := 1;
+    IDLIGNE NUMBER;
+  BEGIN
+  
+    BEGIN
+    
+      SELECT SEQ_PANIER.nextval INTO IDLIGNE FROM DUAL;
+    
+      /* on va enrichir la ligne qu'on insere dans le panier*/
+    
+      INSERT INTO comdpanier
+        (cpr_idlign,
+         cpr_idtiercom,
+         cpr_idtierfou,
+         cpr_idpro,
+         cpr_identgam,
+         cpr_quantip,
+         cpr_quantim,
+         cpr_idutil,
+         cpr_priach,
+         cpr_tva,
+         cpr_dcre,
+         cpr_dmaj,
+         cpr_util,
+         cpr_qvbht,
+         cpr_qvnht,
+         cpr_qvbttc,
+         cpr_qvnttc,
+         CPR_REMISEP)
+        select IDLIGNE,
+               I_TIERCOM,
+               I_TIERFOU,
+               I_PRODUIT,
+               eg.pem_id,
+               DECODE(i_QUANTI,
+                      0,
+                      NVL(log.pdg_pcb, log.pdg_spcb),
+                      (CASE
+                        WHEN round(I_QUANTI / log.pdg_spcb, 0) <>
+                             round(I_QUANTI / log.pdg_spcb, 2) THEN
+                         ceil(I_QUANTI / log.pdg_spcb) * log.pdg_spcb
+                        ELSE
+                         I_QUANTI
+                      END)), -- quantite en piece
+               DECODE(I_QUANTI, 0, 1, (i_QUANTI / log.pdg_spcb)), -- quantite en multiple (spcb)
+               I_UTIL,
+               pa.fph_pach, -- le pach unitaire
+               tva.fta_taux, -- le taux de TVA (pas le code)
+               sysdate,
+               sysdate,
+               'PKCOMMANDE',
+               round((DECODE(i_QUANTI,
+                             0,
+                             NVL(log.pdg_pcb, log.pdg_spcb),
+                             I_QUANTI) * pa.fph_pach),
+                     ARRONDIS), -- quantite valorise brut HT
+               null, -- quantite valorisee net HT
+               round((DECODE(i_QUANTI,
+                             0,
+                             NVL(log.pdg_pcb, log.pdg_spcb),
+                             I_QUANTI) * pa.fph_pach) *
+                     (1 + (tva.fta_taux / 100)),
+                     ARRONDIS), -- quantite valorisee brut TTC
+               null -- quantite valorisee net TTC
+               ,case when eg.pem_id <2 then case when pa.fph_remise is null then 7 else pa.fph_remise end else null end as remise --remise des produits R
+          from prodetgam   dg,
+               proentgam   eg,
+               finpriach   pa,
+               fintva      tva,
+               prodlog     log,
+               tiedetgroup tdg,
+               tieentgroup teg
+         where trunc(sysdate) between dg.pdm_ddeb and dg.pdm_dfin
+           and dg.pdm_idpro = I_PRODUIT
+           and eg.pem_id = dg.pdm_identgam
+           and eg.pem_id in (1, 2) -- TODO: virer la double jointure sur les groupes mais analyse d'impact avant
+           and pa.fph_idpro = I_PRODUIT
+           and pa.fph_idtierfou = I_TIERFOU
+           and trunc(sysdate) between pa.fph_ddeb and pa.fph_dfin
+           and tva.fta_id = pa.fph_tva
+           and trunc(sysdate) between tva.fta_ddeb and tva.fta_dfin
+           and log.pdg_idpro = I_PRODUIT
+           and trunc(sysdate) between log.pdg_ddeb and log.pdg_dfin
+           and tdg.tdp_idtier = I_TIERCOM
+           and teg.tep_id = tdg.tdp_idgroup
+           and trunc(sysdate) between teg.tep_ddeb and teg.tep_dfin
+           and pa.fph_idgroutier = tdg.tdp_idgroup;
+    EXCEPTION
+      WHEN NO_DATA_FOUND THEN
+        O_RET := 2;
+      WHEN OTHERS THEN
+        O_RET := 3;
+    END;
+  
+
+  
+    COMMIT;
+  
+  END INSERT_PANIER;
+
+  FUNCTION VALO_LIGNE_PANIER(IDLIGNE IN NUMBER) RETURN NUMBER IS
+    RET NUMBER;
+  
+    CURSOR C_REMDET(I_TIERCOM IN COMDPANIER.CPR_IDTIERCOM%TYPE, I_TIERFOU IN COMDPANIER.CPR_IDTIERFOU%TYPE, I_IDPRO IN COMDPANIER.CPR_IDPRO%TYPE) IS
+    
+      SELECT ec.fet_id        ID,
+             dc.fdt_oapp      OAPP,
+             ec.fet_label     LABEL,
+             dc.fdt_inf       PAL_INF,
+             dc.fdt_sup       PAL_SUP,
+             dc.fdt_montant   MONTANT,
+             dc.fdt_unite     UNITE,
+             dc.fdt_idprograt PRO_GRAT,
+             dc.fdt_typass    TYP_ASS
+        FROM FINENTCONDDET ec,
+             FINDETCONDDET dc,
+             (SELECT eg.tep_id id_group
+                FROM TIEENTGROUP eg, TIEDETGROUP dg
+               WHERE dg.tdp_idtier = I_TIERCOM
+                 and eg.tep_id = dg.tdp_idgroup
+                 and trunc(sysdate) between eg.tep_ddeb and eg.tep_dfin
+                 and eg.tep_type = TYPE_REM_DET) a
+       WHERE ec.fet_idgroutier = a.id_group
+         and ec.fet_idpro = I_IDPRO
+         and ec.fet_idtierfou = I_TIERFOU
+         and ec.fet_type = TYPE_REM_DET
+         and trunc(sysdate) between ec.fet_ddeb and ec.fet_dfin
+         and dc.fdt_identconddet = ec.fet_id
+       order by dc.fdt_oapp asc;
+  
+    R_REMDET C_REMDET%ROWTYPE;
+  
+    I_TIERCOM COMDPANIER.CPR_IDTIERCOM%TYPE;
+    I_TIERFOU COMDPANIER.CPR_IDTIERFOU%TYPE;
+    I_IDPRO   COMDPANIER.CPR_IDPRO%TYPE;
+    I_QUANTIP COMDPANIER.CPR_QUANTIP%TYPE;
+    I_QVBHT   COMDPANIER.CPR_QVBHT%TYPE;
+  
+    QUANTITE NUMBER := 0;
+    TVA      NUMBER := 0;
+    VALEUR   NUMBER(15, 5) := 0;
+  
+  BEGIN
+  
+    BEGIN
+      -- on va rechercher les infos du panier dont on a besoin pour aller attaquer 
+      -- la table des remises aux details
+      select t.cpr_idtiercom,
+             t.cpr_idtierfou,
+             t.cpr_idpro,
+             t.cpr_quantip,
+             t.cpr_qvbht
+        into I_TIERCOM, I_TIERFOU, I_IDPRO, I_QUANTIP, I_QVBHT
+        from comdpanier t
+       where t.cpr_idlign = IDLIGNE;
+    
+      RET := 0;
+      IF (I_TIERCOM IS NOT NULL AND I_TIERFOU IS NOT NULL AND
+         I_IDPRO IS NOT NULL AND I_QUANTIP IS NOT NULL AND
+         I_QVBHT IS NOT NULL) THEN
+      
+        OPEN C_REMDET(I_TIERCOM, I_TIERFOU, I_IDPRO);
+        FETCH C_REMDET
+          INTO R_REMDET;
+        WHILE C_REMDET%FOUND LOOP
+        
+          EXIT WHEN C_REMDET%NOTFOUND;
+          /* Type de quantite consideree: en piece ou en valeur */
+          QUANTITE := 0;
+          IF (R_REMDET.TYP_ASS = 0) THEN
+            QUANTITE := I_QUANTIP;
+          
+          ELSIF (R_REMDET.TYP_ASS = 1) THEN
+            QUANTITE := I_QVBHT;
+          ELSE
+            /* si pas precise, alors en piece */
+            QUANTITE := I_QUANTIP;
+          END IF;
+        
+          VALEUR := 0;
+          /* Remise en pourcentage */
+          IF R_REMDET.UNITE = R_POURCENTAGE THEN
+          
+            IF (R_REMDET.PAL_INF = 0 AND R_REMDET.PAL_SUP IS NULL) THEN
+              /* calcul de la remise sur le seul palier */
+              VALEUR := I_QVBHT * (ABS(R_REMDET.MONTANT) / 100);
+            ELSIF (R_REMDET.PAL_INF <= QUANTITE AND
+                  QUANTITE <= R_REMDET.PAL_SUP) THEN
+              /* calcul de la remise en considerant les 2 seuils */
+              VALEUR := I_QVBHT * (ABS(R_REMDET.MONTANT) / 100);
+            
+            ELSIF (R_REMDET.PAL_INF > 0 AND R_REMDET.PAL_SUP IS NULL AND
+                  QUANTITE >= R_REMDET.PAL_INF) THEN
+              /* calcul de la remise sur le dernier palier */
+              VALEUR := I_QVBHT * (ABS(R_REMDET.MONTANT) / 100);
+            
+            END IF;
+          
+          END IF;
+          /* Remise en monnaie de base */
+          IF R_REMDET.UNITE = R_MONNAIE THEN
+          
+            IF (R_REMDET.PAL_INF = 0 AND R_REMDET.PAL_SUP IS NULL) THEN
+            
+              /* calcul de la remise sur le seul palier */
+              VALEUR := (ABS(R_REMDET.MONTANT));
+            
+            ELSIF (R_REMDET.PAL_INF <= QUANTITE AND
+                  QUANTITE <= R_REMDET.PAL_SUP) THEN
+            
+              /* calcul de la remise en considerant les 2 seuils */
+              VALEUR := (ABS(R_REMDET.MONTANT));
+            
+            ELSIF (R_REMDET.PAL_INF > 0 AND R_REMDET.PAL_SUP IS NULL AND
+                  QUANTITE >= R_REMDET.PAL_INF) THEN
+            
+              /* calcul de la remise sur le dernier palier */
+              VALEUR := (ABS(R_REMDET.MONTANT));
+            
+            END IF;
+          END IF;
+          /* Remise en gratuit */
+          IF R_REMDET.UNITE = R_GRATUIT THEN
+          
+            IF (R_REMDET.PAL_INF = 0 AND R_REMDET.PAL_SUP IS NULL) THEN
+            
+              /* calcul de la remise sur le seul palier */
+              VALEUR := (ABS(R_REMDET.MONTANT));
+            
+            ELSIF (R_REMDET.PAL_INF <= QUANTITE AND
+                  QUANTITE <= R_REMDET.PAL_SUP) THEN
+            
+              /* calcul de la remise en considerant les 2 seuils */
+              VALEUR := (ABS(R_REMDET.MONTANT));
+            
+            ELSIF (R_REMDET.PAL_INF > 0 AND R_REMDET.PAL_SUP IS NULL AND
+                  QUANTITE >= R_REMDET.PAL_INF) THEN
+            
+              /* calcul de la remise sur le dernier palier */
+              VALEUR := (ABS(R_REMDET.MONTANT));
+            
+            END IF;
+          
+          END IF;
+        
+          IF VALEUR > 0 THEN
+            /* on met a jour les donnees dans le panier */
+            /* il faut aussi recalculer la TVA */
+            IF (PKCOMMANDE.MAJ_LIGNE_PANIER(IDLIGNE, R_REMDET.UNITE, VALEUR) = 0) THEN
+            
+              RET := PKCOMMANDE.SAVE_REM_DET_PANIER(I_TIERCOM,
+                                                    I_TIERFOU,
+                                                    R_REMDET.ID,
+                                                    I_IDPRO,
+                                                    R_REMDET.LABEL,
+                                                    R_REMDET.PAL_INF,
+                                                    R_REMDET.PAL_SUP,
+                                                    R_REMDET.MONTANT,
+                                                    R_REMDET.UNITE,
+                                                    VALEUR,
+                                                    R_REMDET.PRO_GRAT,
+                                                    R_REMDET.TYP_ASS,
+                                                    IDLIGNE,
+                                                    QUANTITE);
+              IF RET != 0 THEN
+                dbms_output.put_line('Probleme SAVE_REM_DET_PANIER');
+              END IF;
+            
+              RET := PKCOMMANDE.CALC_TVA_LIGNE_PANIER(IDLIGNE);
+              IF RET != 0 THEN
+                dbms_output.put_line('Probleme CALC_TVA_LIGNE_PANIER');
+              END IF;
+            
+            ELSE
+              dbms_output.put_line('Probleme MAJ_LIGNE_PANIER');
+            END IF;
+          
+          END IF;
+        
+          FETCH C_REMDET
+            INTO R_REMDET;
+        END LOOP;
+      
+        IF C_REMDET%ISOPEN THEN
+          CLOSE C_REMDET;
+        END IF;
+        COMMIT;
+      END IF;
+      RETURN RET;
+    
+    END;
+  
+  END VALO_LIGNE_PANIER;
+
+  FUNCTION MAJ_LIGNE_PANIER(IDLIGNE IN NUMBER,
+                            UNITE   IN NUMBER,
+                            VALEUR  IN COMDPANIER.CPR_QVNHT%TYPE)
+    RETURN NUMBER IS
+    O_RET NUMBER;
+  
+  BEGIN
+  
+    /* il faut initialiser la valeur du montant net*/
+    O_RET := 0;
+  
+    IF UNITE = R_POURCENTAGE THEN
+      BEGIN
+        /* Remise en % */
+        UPDATE comdpanier t
+           SET t.cpr_qvnht = (t.cpr_qvnht - VALEUR),
+               t.cpr_util  = 'MAJ_LIGNE',
+               t.cpr_dmaj  = sysdate
+         WHERE t.cpr_idlign = IDLIGNE;
+      EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+          O_RET := 2;
+        WHEN OTHERS THEN
+          O_RET := 3;
+      END;
+    END IF;
+    /* Remise en monnaie de base */
+    IF UNITE = R_MONNAIE THEN
+      BEGIN
+        /* Remise en % */
+        UPDATE comdpanier t
+           SET t.cpr_qvnht = t.cpr_qvnht - VALEUR,
+               t.cpr_util  = 'MAJ_LIGNE',
+               t.cpr_dmaj  = sysdate
+         WHERE t.cpr_idlign = IDLIGNE;
+      EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+          O_RET := 2;
+        WHEN OTHERS THEN
+          O_RET := 3;
+      END;
+    
+    END IF;
+    /* Remise en gratuit */
+    IF UNITE = R_GRATUIT THEN
+      BEGIN
+        /* Remise en % */
+        UPDATE comdpanier t
+           SET t.cpr_qgligne = t.cpr_qgligne + VALEUR,
+               t.cpr_util    = 'MAJ_LIGNE',
+               t.cpr_dmaj    = sysdate
+         WHERE t.cpr_idlign = IDLIGNE;
+      EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+          O_RET := 2;
+        WHEN OTHERS THEN
+          O_RET := 3;
+      END;
+    END IF;
+  
+    RETURN O_RET;
+  
+  END MAJ_LIGNE_PANIER;
+
+  FUNCTION CALC_TVA_LIGNE_PANIER(IDLIGNE IN NUMBER) RETURN NUMBER IS
+    O_RET NUMBER;
+  
+  BEGIN
+  
+    /* il faut initialiser la valeur du montant net*/
+    O_RET := 0;
+  
+    BEGIN
+      /* Remise en % */
+      UPDATE comdpanier t
+         SET t.cpr_mbtva   = t.cpr_qvbht * (ABS(t.cpr_tva) / 100),
+             t.cpr_mntva   = decode(t.cpr_qvnnht,
+                                    0,
+                                    t.cpr_qvnht,
+                                    t.cpr_qvnnht) * (ABS(t.cpr_tva) / 100),
+             t.cpr_qvbttc  = t.cpr_qvbht * (1 + (ABS(t.cpr_tva) / 100)),
+             t.cpr_qvnttc  = t.cpr_qvnht * (1 + (ABS(t.cpr_tva) / 100)),
+             t.cpr_qvnnttc = t.cpr_qvnnht * (1 + (ABS(t.cpr_tva) / 100)),
+             t.cpr_util    = 'CALC_TVA',
+             t.cpr_dmaj    = sysdate
+       WHERE t.cpr_idlign = IDLIGNE;
+    EXCEPTION
+      WHEN NO_DATA_FOUND THEN
+        O_RET := 2;
+      WHEN OTHERS THEN
+        O_RET := 3;
+    END;
+  
+    RETURN O_RET;
+  
+  END CALC_TVA_LIGNE_PANIER;
+
+  FUNCTION RAZ_LIGNE_PANIER(IDLIGNE IN NUMBER) RETURN NUMBER IS
+    O_RET NUMBER;
+  
+  BEGIN
+  
+    BEGIN
+      /* il faut initialiser la valeur du montant net*/
+      O_RET := 0;
+    
+      BEGIN
+        /* Remise en % */
+        UPDATE comdpanier t
+           SET t.cpr_qvnht   = t.cpr_qvbht,
+               t.cpr_qvnttc  = t.cpr_qvbttc,
+               t.cpr_qgligne = 0,
+               t.cpr_util    = 'RAZ_LIGNE',
+               t.cpr_mbtva   = 0,
+               t.cpr_mntva   = 0,
+               t.cpr_qvnnht  = 0,
+               t.cpr_qvnnttc = 0,
+               t.cpr_dmaj    = sysdate
+         WHERE t.cpr_idlign = IDLIGNE;
+      EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+          O_RET := 2;
+        WHEN OTHERS THEN
+          O_RET := 3;
+      END;
+    
+      BEGIN
+        /* Remise en % */
+        DELETE comdpanierrem t WHERE t.cpm_idligne = IDLIGNE;
+      EXCEPTION
+        WHEN OTHERS THEN
+          O_RET := 5;
+      END;
+    
+      RETURN O_RET;
+    
+    END;
+  
+  END RAZ_LIGNE_PANIER;
+
+  PROCEDURE VALO_PANIER_GLO(I_TIERCOM IN COMDPANIER.CPR_IDTIERCOM%TYPE,
+                            I_TIERFOU IN COMDPANIER.CPR_IDTIERFOU%TYPE) IS
+  
+    CURSOR C_PANIER(I_TIERCOM IN COMDPANIER.CPR_IDTIERCOM%TYPE, I_TIERFOU IN COMDPANIER.CPR_IDTIERFOU%TYPE) IS
+    
+      select d.cpr_idlign IDLIGNE,
+             d.cpr_quantip QUANTIP,
+             decode(d.cpr_qvnnht, 0, d.cpr_qvnht, d.cpr_qvnnht) QVBHT,
+             decode(d.cpr_qvnnht, 0, d.cpr_qvnht, d.cpr_qvnnht) QVNHT
+        from comdpanier d
+       where d.cpr_idtiercom = I_TIERCOM
+         and d.cpr_idtierfou = I_TIERFOU;
+  
+    R_PANIER C_PANIER%ROWTYPE;
+  
+    CURSOR C_REMGLO(I_TIERCOM IN COMDPANIER.CPR_IDTIERCOM%TYPE, I_TIERFOU IN COMDPANIER.CPR_IDTIERFOU%TYPE) IS
+    
+      select eo.feo_id ID,
+             eo.feo_label LABEL,
+             do.fdo_oapp OAPP,
+             do.fdo_inf PAL_INF,
+             do.fdo_sup PAL_SUP,
+             nvl(cdx.cdx_newval, do.fdo_montant) MONTANT,
+             do.fdo_unite UNITE,
+             do.fpo_idprograt PRO_GRAT,
+             do.fdo_typass TYP_ASS,
+             eo.feo_lov LOV,
+             eo.feo_desc DESCR
+        from finentcondglo eo
+        LEFT OUTER JOIN comdpanierrem_ex cdx on (cdx.cdx_idtierfou =
+                                                eo.feo_idtierfou and
+                                                cdx.cdx_idtiercom =
+                                                I_TIERCOM and
+                                                cdx.cdx_idrem = eo.feo_id),
+       findetcondglo do,
+       (SELECT eg.tep_id id_group
+                                                   FROM TIEENTGROUP eg,
+                                                        TIEDETGROUP dg
+                                                  WHERE dg.tdp_idtier =
+                                                        I_TIERCOM
+                                                    and eg.tep_id =
+                                                        dg.tdp_idgroup
+                                                    and trunc(sysdate) between
+                                                        eg.tep_ddeb and
+                                                        eg.tep_dfin
+                                                    and eg.tep_type =
+                                                        TYPE_REM_GLO) a
+       where eo.feo_idgroutier = a.id_group
+         and eo.feo_idtierfou = I_TIERFOU
+         and do.fpo_identconddet = eo.feo_id
+         and eo.feo_idfam is null
+         and trunc(sysdate) between eo.feo_ddeb and eo.feo_dfin
+       order by oapp asc;
+  
+    R_REMGLO     C_REMGLO%ROWTYPE;
+    RET          NUMBER := 0;
+    QUANTITE     NUMBER := 0;
+    TVA          NUMBER := 0;
+    VALEUR       NUMBER(15, 5) := 0;
+    TOTAL_REM    NUMBER(15, 5) := 0;
+    QUANTITE_REM NUMBER(15, 5) := 0;
+  
+  BEGIN
+  
+    BEGIN
+    
+      RET := 0;
+    
+      OPEN C_REMGLO(I_TIERCOM, I_TIERFOU);
+      FETCH C_REMGLO
+        INTO R_REMGLO;
+      WHILE C_REMGLO%FOUND LOOP
+      
+        EXIT WHEN C_REMGLO%NOTFOUND;
+      
+        /* Valeur pour comdpanierrem*/
+        TOTAL_REM    := 0;
+        QUANTITE_REM := 0;
+      
+        OPEN C_PANIER(I_TIERCOM, I_TIERFOU);
+        FETCH C_PANIER
+          INTO R_PANIER;
+        WHILE C_PANIER%FOUND LOOP
+        
+          EXIT WHEN C_PANIER%NOTFOUND;
+        
+          IF (R_PANIER.QUANTIP IS NOT NULL AND R_PANIER.QVBHT IS NOT NULL) THEN
+          
+            /* Type de quantite consideree: en piece ou en valeur */
+            QUANTITE := 0;
+            IF (R_REMGLO.TYP_ASS = 0) THEN
+              QUANTITE := R_PANIER.QUANTIP;
+            
+            ELSIF (R_REMGLO.TYP_ASS = 1) THEN
+              QUANTITE := R_PANIER.QVBHT;
+            ELSE
+              /* si pas precise, alors en piece */
+              QUANTITE := R_PANIER.QUANTIP;
+            END IF;
+          
+            VALEUR := 0;
+            /* Remise en pourcentage */
+            IF R_REMGLO.UNITE = R_POURCENTAGE THEN
+            
+              IF (R_REMGLO.PAL_INF = 0 AND R_REMGLO.PAL_SUP IS NULL) THEN
+                /* calcul de la remise sur le seul palier */
+                VALEUR := R_PANIER.QVNHT * (ABS(R_REMGLO.MONTANT) / 100);
+              ELSIF (R_REMGLO.PAL_INF <= QUANTITE AND
+                    QUANTITE <= R_REMGLO.PAL_SUP) THEN
+                /* calcul de la remise en considerant les 2 seuils */
+                VALEUR := R_PANIER.QVNHT * (ABS(R_REMGLO.MONTANT) / 100);
+              
+              ELSIF (R_REMGLO.PAL_INF > 0 AND R_REMGLO.PAL_SUP IS NULL AND
+                    QUANTITE >= R_REMGLO.PAL_INF) THEN
+                /* calcul de la remise sur le dernier palier */
+                VALEUR := R_PANIER.QVNHT * (ABS(R_REMGLO.MONTANT) / 100);
+              
+              END IF;
+            
+            END IF;
+            /* Remise en monnaie de base */
+            IF R_REMGLO.UNITE = R_MONNAIE THEN
+            
+              IF (R_REMGLO.PAL_INF = 0 AND R_REMGLO.PAL_SUP IS NULL) THEN
+              
+                /* calcul de la remise sur le seul palier */
+                VALEUR := (ABS(R_REMGLO.MONTANT));
+              
+              ELSIF (R_REMGLO.PAL_INF <= QUANTITE AND
+                    QUANTITE <= R_REMGLO.PAL_SUP) THEN
+              
+                /* calcul de la remise en considerant les 2 seuils */
+                VALEUR := (ABS(R_REMGLO.MONTANT));
+              
+              ELSIF (R_REMGLO.PAL_INF > 0 AND R_REMGLO.PAL_SUP IS NULL AND
+                    QUANTITE >= R_REMGLO.PAL_INF) THEN
+              
+                /* calcul de la remise sur le dernier palier */
+                VALEUR := (ABS(R_REMGLO.MONTANT));
+              
+              END IF;
+            END IF;
+            /* Remise en gratuit */
+            IF R_REMGLO.UNITE = R_GRATUIT THEN
+            
+              IF (R_REMGLO.PAL_INF = 0 AND R_REMGLO.PAL_SUP IS NULL) THEN
+              
+                /* calcul de la remise sur le seul palier */
+                VALEUR := (ABS(R_REMGLO.MONTANT));
+              
+              ELSIF (R_REMGLO.PAL_INF <= QUANTITE AND
+                    QUANTITE <= R_REMGLO.PAL_SUP) THEN
+              
+                /* calcul de la remise en considerant les 2 seuils */
+                VALEUR := (ABS(R_REMGLO.MONTANT));
+              
+              ELSIF (R_REMGLO.PAL_INF > 0 AND R_REMGLO.PAL_SUP IS NULL AND
+                    QUANTITE >= R_REMGLO.PAL_INF) THEN
+              
+                /* calcul de la remise sur le dernier palier */
+                VALEUR := (ABS(R_REMGLO.MONTANT));
+              
+              END IF;
+            
+            END IF;
+          
+            IF VALEUR >= 0 THEN
+              /* on met a jour les donnees dans le panier */
+              /* il faut aussi recalculer la TVA */
+              IF (PKCOMMANDE.MAJ_LIGNE_PANIER_GLO(R_PANIER.IDLIGNE,
+                                                  R_REMGLO.UNITE,
+                                                  VALEUR) = 0) THEN
+                RET := PKCOMMANDE.CALC_TVA_LIGNE_PANIER(R_PANIER.IDLIGNE);
+                IF RET != 0 THEN
+                  dbms_output.put_line('Probleme CALC_TVA_LIGNE_PANIER');
+                END IF;
+              ELSE
+             
+                dbms_output.put_line('Probleme MAJ_LIGNE_PANIER');
+              END IF;
+            
+            END IF;
+          
+          END IF;
+        
+          TOTAL_REM    := TOTAL_REM + VALEUR;
+          QUANTITE_REM := QUANTITE_REM + QUANTITE;
+        
+          FETCH C_PANIER
+            INTO R_PANIER;
+        END LOOP;
+      
+        IF C_PANIER%ISOPEN THEN
+          CLOSE C_PANIER;
+        END IF;
+      
+        /* avant de checker pour les autres remises, on va conserver 
+        les donnees dans comdpanierrem */
+        IF (TOTAL_REM >= 0 or R_REMGLO.LOV = 1) THEN
+          RET := PKCOMMANDE.SAVE_REM_GLO_PANIER(I_TIERCOM,
+                                                I_TIERFOU,
+                                                R_REMGLO.ID,
+                                                R_REMGLO.LABEL,
+                                                R_REMGLO.PAL_INF,
+                                                R_REMGLO.PAL_SUP,
+                                                R_REMGLO.MONTANT,
+                                                R_REMGLO.UNITE,
+                                                TOTAL_REM,
+                                                R_REMGLO.PRO_GRAT,
+                                                R_REMGLO.TYP_ASS,
+                                                QUANTITE_REM,
+                                                R_REMGLO.DESCR);
+        END IF;
+      
+        FETCH C_REMGLO
+          INTO R_REMGLO;
+      END LOOP;
+    
+      IF C_REMGLO%ISOPEN THEN
+        CLOSE C_REMGLO;
+      END IF;
+    
+      COMMIT;
+    
+    END;
+  
+  END VALO_PANIER_GLO;
+
+  FUNCTION MAJ_LIGNE_PANIER_GLO(IDLIGNE IN NUMBER,
+                                UNITE   IN NUMBER,
+                                VALEUR  IN COMDPANIER.CPR_QVNHT%TYPE)
+    RETURN NUMBER IS
+    O_RET NUMBER;
+  
+  BEGIN
+  
+    /* il faut initialiser la valeur du montant net*/
+    O_RET := 0;
+  
+    IF UNITE = R_POURCENTAGE THEN
+      BEGIN
+        /* Remise en % */
+        UPDATE comdpanier t
+           SET t.cpr_qvnnht = DECODE(t.cpr_qvnnht,
+                                     0,
+                                     t.cpr_qvnht,
+                                     t.cpr_qvnnht) - VALEUR,
+               t.cpr_util   = 'MAJ_LIGNEGLO',
+               t.cpr_dmaj   = sysdate
+         WHERE t.cpr_idlign = IDLIGNE;
+      EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+          O_RET := 2;
+        WHEN OTHERS THEN
+          O_RET := 3;
+      END;
+    END IF;
+    /* Remise en monnaie de base */
+    IF UNITE = R_MONNAIE THEN
+      BEGIN
+        /* Remise en % */
+        UPDATE comdpanier t
+           SET t.cpr_qvnnht = DECODE(t.cpr_qvnnht,
+                                     0,
+                                     t.cpr_qvnht,
+                                     t.cpr_qvnnht) - VALEUR,
+               t.cpr_util   = 'MAJ_LIGNEGLO',
+               t.cpr_dmaj   = sysdate
+         WHERE t.cpr_idlign = IDLIGNE;
+      EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+          O_RET := 2;
+        WHEN OTHERS THEN
+          O_RET := 3;
+      END;
+    
+    END IF;
+    /* Remise en gratuit */
+    IF UNITE = R_GRATUIT THEN
+      BEGIN
+        /* Remise en % */
+        UPDATE comdpanier t
+           SET t.cpr_qgpied = t.cpr_qgpied + VALEUR,
+               t.cpr_util   = 'MAJ_LIGNE',
+               t.cpr_dmaj   = sysdate
+         WHERE t.cpr_idlign = IDLIGNE;
+      EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+          O_RET := 2;
+        WHEN OTHERS THEN
+          O_RET := 3;
+      END;
+    END IF;
+  
+    RETURN O_RET;
+  
+  END MAJ_LIGNE_PANIER_GLO;
+
+  FUNCTION SAVE_REM_DET_PANIER(I_TIERCOM COMDPANIER.CPR_IDTIERCOM%TYPE,
+                               I_TIERFOU COMDPANIER.CPR_IDTIERFOU%TYPE,
+                               ID        FINENTCONDDET.FET_ID%TYPE,
+                               I_IDPRO   COMDPANIER.CPR_IDPRO%TYPE,
+                               LABEL     FINENTCONDDET.FET_LABEL%TYPE,
+                               PAL_INF   FINDETCONDDET.FDT_INF%TYPE,
+                               PAL_SUP   FINDETCONDDET.FDT_SUP%TYPE,
+                               MONTANT   FINDETCONDDET.FDT_MONTANT%TYPE,
+                               UNITE     FINDETCONDDET.FDT_UNITE%TYPE,
+                               VALEUR    NUMBER,
+                               PRO_GRAT  FINDETCONDDET.FDT_IDPROGRAT%TYPE,
+                               TYP_ASS   FINDETCONDDET.FDT_TYPASS%TYPE,
+                               IDLIGNE   COMDPANIER.CPR_IDLIGN%TYPE,
+                               BASE      COMDPANIERREM.CPM_BASE%TYPE)
+  
+   RETURN NUMBER IS
+    O_RET NUMBER;
+  
+  BEGIN
+  
+    O_RET := 0;
+  
+    BEGIN
+    
+      INSERT INTO comdpanierrem
+        (cpm_idtiercom,
+         cpm_idtierfou,
+         cpm_idrem,
+         cpm_idpro,
+         cpm_label,
+         cpm_inf,
+         cpm_sup,
+         cpm_montant,
+         cpm_unite,
+         cpm_valeur,
+         cpm_dcre,
+         cpm_dmaj,
+         cpm_util,
+         cpm_typass,
+         cpm_prograt,
+         cpm_idligne,
+         cpm_base)
+      VALUES
+        (I_TIERCOM,
+         I_TIERFOU,
+         ID,
+         I_IDPRO,
+         LABEL,
+         PAL_INF,
+         PAL_SUP,
+         MONTANT,
+         UNITE,
+         VALEUR,
+         sysdate,
+         sysdate,
+         'VALO_LIGNE',
+         TYP_ASS,
+         PRO_GRAT,
+         IDLIGNE,
+         BASE);
+    EXCEPTION
+      WHEN NO_DATA_FOUND THEN
+        O_RET := 2;
+      WHEN OTHERS THEN
+        O_RET := 3;
+    END;
+  
+    RETURN O_RET;
+  
+  END SAVE_REM_DET_PANIER;
+
+  FUNCTION SAVE_REM_GLO_PANIER(I_TIERCOM COMDPANIER.CPR_IDTIERCOM%TYPE,
+                               I_TIERFOU COMDPANIER.CPR_IDTIERFOU%TYPE,
+                               ID        FINENTCONDDET.FET_ID%TYPE,
+                               LABEL     FINENTCONDDET.FET_LABEL%TYPE,
+                               PAL_INF   FINDETCONDDET.FDT_INF%TYPE,
+                               PAL_SUP   FINDETCONDDET.FDT_SUP%TYPE,
+                               MONTANT   FINDETCONDDET.FDT_MONTANT%TYPE,
+                               UNITE     FINDETCONDDET.FDT_UNITE%TYPE,
+                               VALEUR    NUMBER,
+                               PRO_GRAT  FINDETCONDDET.FDT_IDPROGRAT%TYPE,
+                               TYP_ASS   FINDETCONDDET.FDT_TYPASS%TYPE,
+                               BASE      COMDPANIERREM.CPM_BASE%TYPE,
+                               DESCR     COMDPANIERREM.CPM_DESC%TYPE)
+  
+   RETURN NUMBER IS
+    O_RET NUMBER;
+  
+  BEGIN
+  
+    O_RET := 0;
+  
+    BEGIN
+    
+      INSERT INTO comdpanierrem
+        (cpm_idtiercom,
+         cpm_idtierfou,
+         cpm_idrem,
+         cpm_idpro,
+         cpm_label,
+         cpm_inf,
+         cpm_sup,
+         cpm_montant,
+         cpm_unite,
+         cpm_valeur,
+         cpm_dcre,
+         cpm_dmaj,
+         cpm_util,
+         cpm_typass,
+         cpm_prograt,
+         cpm_idligne,
+         cpm_base,
+         cpm_desc)
+      VALUES
+        (I_TIERCOM,
+         I_TIERFOU,
+         ID,
+         NULL,
+         LABEL,
+         PAL_INF,
+         PAL_SUP,
+         MONTANT,
+         UNITE,
+         VALEUR,
+         sysdate,
+         sysdate,
+         'VALO_PAN_GL',
+         TYP_ASS,
+         PRO_GRAT,
+         NULL,
+         BASE,
+         DESCR);
+    EXCEPTION
+      WHEN NO_DATA_FOUND THEN
+        O_RET := 2;
+      WHEN OTHERS THEN
+        O_RET := 3;
+    END;
+  
+    RETURN O_RET;
+  
+  END SAVE_REM_GLO_PANIER;
+
+  PROCEDURE CREATE_COMMANDE(I_TIERCOM   IN NUMBER,
+                            I_TIERFOU   IN NUMBER,
+                            I_DATE      IN VARCHAR2,
+                            IDCOMENTCDE OUT NUMBER) IS
+    O_RET NUMBER := 0;
+  
+  
+  
+  BEGIN
+  
+     BEGIN
+       select   t.par_val
+        into FRANCO_R
+      from parametres t where par_id = 1;
+   END;
+   BEGIN
+       select   t.par_val
+        into FRANCO_NR
+      from parametres t where par_id = 2;
+   END;
+  
+    BEGIN
+    
+      /* Creation de l'entete de commande */
+      SELECT SEQ_ENTETE_COM.nextval INTO IDCOMENTCDE FROM DUAL;
+    
+      INSERT INTO COMENTCDE
+        (CEE_ID,
+         CEE_IDTIERCOM,
+         CEE_IDTIERFOU,
+         CEE_STATUT,
+         CEE_DCOM,
+         CEE_DEXP,
+         CEE_DTRANS,
+         CEE_DCRE,
+         CEE_DMAJ,
+         CEE_UTIL,
+         CEE_CEXT,
+         CEE_PROV)
+        select IDCOMENTCDE,
+               I_TIERCOM,
+               I_TIERFOU,
+               STATUT_CREE_1,
+               TRUNC(SYSDATE),
+               TO_DATE(I_DATE, 'DD/MM/YYYY')I_DATE,
+               NULL,
+               SYSDATE,
+               SYSDATE,
+               'CREATE_COM',
+               -- ancienne version du code
+               -- TO_CHAR(SYSDATE, 'YYYYMMDD')||lpad(IDCOMENTCDE ,12 ,'0'),
+               lpad(IDCOMENTCDE, 10, '0'),
+               1
+          from DUAL;
+    EXCEPTION
+      WHEN OTHERS THEN
+        O_RET := 3;
+    END;
+  
+    IF (O_RET = 0) THEN
+      O_RET := PKCOMMANDE.CHECK_FRANCO(I_TIERCOM, I_TIERFOU);
+    
+      IF (O_RET = 0) THEN
+        O_RET := PKCOMMANDE.CREATE_DET_COMMANDE(IDCOMENTCDE,
+                                                I_TIERCOM,
+                                                I_TIERFOU);
+      
+        IF (O_RET = 0) THEN
+          O_RET := PKCOMMANDE.CREATE_PIED_COMMANDE(IDCOMENTCDE,
+                                                   I_TIERCOM,
+                                                   I_TIERFOU);
+        
+          IF (O_RET = 0) THEN
+          
+            COMMIT;
+          
+            /* plus besoin de supprimer les donnees du panier ici, c lors de la confirmation 
+            de la commande qu'on le fera */
+            /* O_RET := PKCOMMANDE.FLUSH_PANIER(I_TIERCOM,I_TIERFOU); */
+          
+            IF (O_RET = 0) THEN
+              COMMIT;
+            
+            ELSE
+              dbms_output.put_line('Erreur durant le vidage du panier O_RET --> ' ||
+                                   O_RET);
+            END IF;
+          
+          ELSE
+            dbms_output.put_line('Erreur a la creation des lignes de commandes O_RET --> ' ||
+                                 O_RET);
+          END IF;
+        
+        ELSE
+          dbms_output.put_line('Erreur a la creation des lignes de commandes O_RET --> ' ||
+                               O_RET);
+        END IF;
+      
+      ELSE
+        dbms_output.put_line('Erreur durant la gestion du franco O_RET --> ' ||
+                             O_RET);
+      END IF;
+    ELSE
+      dbms_output.put_line('Erreur a la creation de l''entete de commande O_RET --> ' ||
+                           O_RET);
+    END IF;
+  
+  END CREATE_COMMANDE;
+
+  FUNCTION CREATE_DET_COMMANDE(IDCOMENTCDE NUMBER,
+                               I_TIERCOM   COMDPANIER.CPR_IDTIERCOM%TYPE,
+                               I_TIERFOU   COMDPANIER.CPR_IDTIERFOU%TYPE)
+    RETURN NUMBER IS
+  
+    CURSOR C_PANIER(I_TIERCOM IN COMDPANIER.CPR_IDTIERCOM%TYPE, I_TIERFOU IN COMDPANIER.CPR_IDTIERFOU%TYPE) IS
+    
+      select d.cpr_idpro   IDPRO,
+             d.cpr_quantip QUANTIP,
+             d.cpr_quantim QUANTIM,
+             d.cpr_priach  PRIACH,
+             d.cpr_tva     TXTVA,
+             d.cpr_qvbht   QVBHT,
+             d.cpr_qvnht   QVNHT,
+             d.cpr_qvnnht  QVNNHT,
+             d.cpr_qvnnttc QVNNTTC,
+             d.cpr_qgligne QGLIGNE,
+             d.cpr_qgpied  QGPIED,
+             d.cpr_mntva   MNTVA,
+             d.cpr_idlign  IDLIGNE
+        from comdpanier d
+       where d.cpr_idtiercom = I_TIERCOM
+         and d.cpr_idtierfou = I_TIERFOU;
+  
+    R_PANIER C_PANIER%ROWTYPE;
+  
+    CURSOR C_REM(IDLIGNE IN COMDPANIER.CPR_IDLIGN%TYPE) IS
+    
+      select cm.cpm_idrem IDREM,
+             cm.cpm_valeur VALEUR,
+             cm.cpm_prograt PROGRAT,
+             decode(cm.cpm_typass, 1, r.cpr_quantip, 2, r.cpr_qvbht) BASE,
+             cm.cpm_label LABEL,
+             cm.cpm_inf PALINF,
+             cm.cpm_sup PALSUP,
+             cm.cpm_montant MONTANT,
+             cm.cpm_unite UNITE,
+             cm.cpm_idgroupe IDGROUPE
+        from comdpanierrem cm, comdpanier r
+       where cm.cpm_idligne = IDLIGNE
+         and r.cpr_idlign = IDLIGNE;
+  
+    R_REM C_REM%ROWTYPE;
+  
+    IDCOMDETCDE NUMBER;
+    IDCOMREMCDE NUMBER;
+  
+    O_RET NUMBER;
+  
+  BEGIN
+  
+    O_RET := 0;
+  
+    BEGIN
+    
+      OPEN C_PANIER(I_TIERCOM, I_TIERFOU);
+      FETCH C_PANIER
+        INTO R_PANIER;
+      WHILE C_PANIER%FOUND LOOP
+        EXIT WHEN C_PANIER%NOTFOUND;
+      
+        select SEQ_DETAIL_COM.NEXTVAL into IDCOMDETCDE from dual;
+      
+        BEGIN
+          INSERT INTO COMDETCDE
+            (cde_idlign,
+             cde_idcde,
+             cde_idpro,
+             cde_quantip,
+             cde_quantim,
+             cde_priach,
+             cde_tva,
+             cde_statut,
+             cde_qvbht,
+             cde_qvnht,
+             cde_qvnnht,
+             cde_qvnnttc,
+             cde_qgrat,
+             cde_mtva,
+             cde_dcre,
+             cde_dmaj,
+             cde_util)
+          VALUES
+            (IDCOMDETCDE,
+             IDCOMENTCDE,
+             R_PANIER.IDPRO,
+             R_PANIER.QUANTIP,
+             R_PANIER.QUANTIM,
+             R_PANIER.PRIACH,
+             R_PANIER.TXTVA,
+             STATUT_CREE_1,
+             R_PANIER.QVBHT,
+             R_PANIER.QVNHT,
+             R_PANIER.QVNNHT,
+             R_PANIER.QVNNTTC,
+             R_PANIER.QGLIGNE + R_PANIER.QGPIED,
+             R_PANIER.MNTVA,
+             SYSDATE,
+             SYSDATE,
+             'CREATE_DET');
+        EXCEPTION
+          WHEN OTHERS THEN
+            O_RET := 4;
+        END;
+      
+        IF (O_RET = 0) THEN
+        
+          OPEN C_REM(R_PANIER.IDLIGNE);
+          FETCH C_REM
+            INTO R_REM;
+          WHILE C_REM%FOUND LOOP
+            EXIT WHEN C_REM%NOTFOUND;
+          
+            BEGIN
+            
+              INSERT INTO COMREMCDE
+                (cre_id,
+                 cre_identete,
+                 cre_idrem,
+                 cre_type,
+                 cre_idligne,
+                 cre_idpro,
+                 cre_valeur,
+                 cre_oapp,
+                 cre_prograt,
+                 cre_dcre,
+                 cre_dmaj,
+                 cre_util,
+                 cre_Base,
+                 cre_Label,
+                 cre_inf,
+                 cre_sup,
+                 cre_montant,
+                 cre_unite,
+                 cre_idgroupe)
+              VALUES
+                (SEQ_REMISE_COM.NEXTVAL,
+                 IDCOMENTCDE,
+                 R_REM.IDREM,
+                 TYPE_REM_DET,
+                 IDCOMDETCDE,
+                 R_PANIER.IDPRO,
+                 R_REM.VALEUR,
+                 1,
+                 R_REM.PROGRAT,
+                 SYSDATE,
+                 SYSDATE,
+                 'CREATE_REMD',
+                 R_REM.BASE,
+                 R_REM.LABEL,
+                 R_REM.PALINF,
+                 R_REM.PALSUP,
+                 R_REM.MONTANT,
+                 R_REM.UNITE,
+                 R_REM.IDGROUPE);
+            
+            EXCEPTION
+              WHEN OTHERS THEN
+                O_RET := 6;
+              
+            END;
+          
+            IF (O_RET > 0) THEN
+              dbms_output.put_line('Erreur a l''insertion de la remise pour la ligne de commande O_RET --> ' ||
+                                   O_RET);
+            END IF;
+          
+            FETCH C_REM
+              INTO R_REM;
+          END LOOP;
+        
+          IF C_REM%ISOPEN THEN
+            CLOSE C_REM;
+          END IF;
+        
+        ELSE
+          dbms_output.put_line('Erreur a l''insertion de la ligne de commande O_RET --> ' ||
+                               O_RET);
+        END IF;
+      
+        FETCH C_PANIER
+          INTO R_PANIER;
+      END LOOP;
+    
+      IF C_PANIER%ISOPEN THEN
+        CLOSE C_PANIER;
+      END IF;
+    
+    END;
+  
+    RETURN O_RET;
+  
+  END CREATE_DET_COMMANDE;
+
+  FUNCTION FLUSH_PANIER(I_TIERCOM COMDPANIER.CPR_IDTIERCOM%TYPE,
+                        I_TIERFOU COMDPANIER.CPR_IDTIERFOU%TYPE)
+    RETURN NUMBER IS
+  
+    O_RET NUMBER;
+  
+  BEGIN
+  
+    O_RET := 0;
+  
+    BEGIN
+      DELETE COMDPANIER CR
+       WHERE CR.CPR_IDTIERCOM = I_TIERCOM
+         AND CR.CPR_IDTIERFOU = I_TIERFOU;
+    EXCEPTION
+      WHEN OTHERS THEN
+        O_RET := 8;
+    END;
+  
+    BEGIN
+      DELETE COMDPANIERREM CRR
+       WHERE CRR.CPM_IDTIERCOM = I_TIERCOM
+         AND CRR.CPM_IDTIERFOU = I_TIERFOU;
+    EXCEPTION
+      WHEN OTHERS THEN
+        O_RET := 14;
+    END;
+  
+    BEGIN
+      DELETE COMDPANIERREM_EX CRX
+       WHERE CRX.CDX_IDTIERCOM = I_TIERCOM
+         AND CRX.CDX_IDTIERFOU = I_TIERFOU;
+    EXCEPTION
+      WHEN OTHERS THEN
+        O_RET := 26;
+    END;
+  
+    RETURN O_RET;
+  
+  END FLUSH_PANIER;
+
+  FUNCTION CREATE_PIED_COMMANDE(IDCOMENTCDE NUMBER,
+                                I_TIERCOM   COMDPANIER.CPR_IDTIERCOM%TYPE,
+                                I_TIERFOU   COMDPANIER.CPR_IDTIERFOU%TYPE)
+    RETURN NUMBER IS
+  
+    CURSOR C_REM(I_TIERCOM COMDPANIER.CPR_IDTIERCOM%TYPE, I_TIERFOU COMDPANIER.CPR_IDTIERFOU%TYPE) IS
+    
+      select cm.cpm_idrem IDREM,
+             cm.cpm_valeur VALEUR,
+             cm.cpm_prograt PROGRAT,
+             cm.cpm_base BASE,
+             cm.cpm_label LABEL,
+             cm.cpm_inf PALINF,
+             cm.cpm_sup PALSUP,
+             nvl(cdx.cdx_newval, cm.cpm_montant) MONTANT,
+             cm.cpm_unite UNITE,
+             cm.cpm_idgroupe IDGROUPE,
+             nvl(cdx.cdx_desc, cm.cpm_desc) DESCR
+        from comdpanierrem cm
+        left outer join comdpanierrem_ex cdx on (cdx.cdx_idtiercom =
+                                                cm.cpm_idtiercom and
+                                                cdx.cdx_idtierfou =
+                                                cm.cpm_idtierfou and
+                                                cdx.cdx_idrem =
+                                                cm.cpm_idrem)
+       where cm.cpm_idtiercom = I_TIERCOM
+         and cm.cpm_idtierfou = I_TIERFOU
+         and cm.cpm_idligne IS NULL;
+  
+    R_REM C_REM%ROWTYPE;
+  
+    O_RET NUMBER;
+  
+  BEGIN
+  
+    O_RET := 0;
+  
+    BEGIN
+    
+      INSERT INTO COMPIEDCDE
+        (cpe_identcde,
+         cpe_qtvbht,
+         cpe_qtvnht,
+         cpe_qtvnnht,
+         cpe_qtvnnttc,
+         cpe_mtva,
+         cpe_qtprograt,
+         cpe_dcre,
+         cpe_dmaj,
+         cpe_util)
+        SELECT IDCOMENTCDE,
+               sum(r.cpr_qvbht),
+               sum(r.cpr_qvnht),
+               sum(r.cpr_qvnnht),
+               sum(r.cpr_qvnnttc),
+               sum(r.cpr_mntva),
+               sum(r.cpr_qgligne) + sum(r.cpr_qgpied),
+               SYSDATE,
+               SYSDATE,
+               'CREATE_PIED'
+          from comdpanier r
+         where r.cpr_idtiercom = I_TIERCOM
+           and r.cpr_idtierfou = I_TIERFOU;
+    
+    EXCEPTION
+      WHEN OTHERS THEN
+        O_RET := 10;
+      
+    END;
+  
+    IF (O_RET = 0) THEN
+    
+      OPEN C_REM(I_TIERCOM, I_TIERFOU);
+      FETCH C_REM
+        INTO R_REM;
+      WHILE C_REM%FOUND LOOP
+        EXIT WHEN C_REM%NOTFOUND;
+      
+        BEGIN
+        
+          INSERT INTO COMREMCDE
+            (cre_id,
+             cre_identete,
+             cre_idrem,
+             cre_type,
+             cre_idligne,
+             cre_idpro,
+             cre_valeur,
+             cre_oapp,
+             cre_prograt,
+             cre_dcre,
+             cre_dmaj,
+             cre_util,
+             cre_base,
+             cre_label,
+             cre_inf,
+             cre_sup,
+             cre_montant,
+             cre_unite,
+             cre_idgroupe,
+             cre_Desc)
+          VALUES
+            (SEQ_REMISE_COM.NEXTVAL,
+             IDCOMENTCDE,
+             R_REM.IDREM,
+             TYPE_REM_GLO,
+             NULL,
+             NULL,
+             R_REM.VALEUR,
+             1,
+             R_REM.PROGRAT,
+             SYSDATE,
+             SYSDATE,
+             'CREATE_REMG',
+             R_REM.BASE,
+             R_REM.LABEL,
+             R_REM.PALINF,
+             R_REM.PALSUP,
+             R_REM.MONTANT,
+             R_REM.UNITE,
+             R_REM.IDGROUPE,
+             R_REM.DESCR);
+        
+        EXCEPTION
+          WHEN OTHERS THEN
+            O_RET := 12;
+          
+        END;
+      
+        IF (O_RET > 0) THEN
+          dbms_output.put_line('Erreur a l''insertion de la remise pour le pied de la commande O_RET --> ' ||
+                               O_RET);
+        END IF;
+      
+        FETCH C_REM
+          INTO R_REM;
+      END LOOP;
+    
+      IF C_REM%ISOPEN THEN
+        CLOSE C_REM;
+      END IF;
+    
+    ELSE
+      dbms_output.put_line('Erreur a l''insertion du pied de la commande O_RET --> ' ||
+                           O_RET);
+    END IF;
+  
+    RETURN O_RET;
+  
+  END CREATE_PIED_COMMANDE;
+
+  PROCEDURE DELETE_PANIER(I_TIERCOM COMDPANIER.CPR_IDTIERCOM%TYPE,
+                          I_TIERFOU COMDPANIER.CPR_IDTIERFOU%TYPE,
+                          I_PRODUIT COMDPANIER.CPR_IDPRO%TYPE)
+  
+   IS
+  
+    O_RET NUMBER;
+  
+  BEGIN
+  
+    O_RET := 0;
+  
+    BEGIN
+      DELETE COMDPANIER CR
+       WHERE CR.CPR_IDTIERCOM = I_TIERCOM
+         AND CR.CPR_IDTIERFOU = I_TIERFOU
+         AND CR.CPR_IDPRO = I_PRODUIT;
+    EXCEPTION
+      WHEN OTHERS THEN
+        O_RET := 8;
+    END;
+  
+    BEGIN
+      DELETE COMDPANIERREM CRR
+       WHERE CRR.CPM_IDTIERCOM = I_TIERCOM
+         AND CRR.CPM_IDTIERFOU = I_TIERFOU
+         AND CRR.CPM_IDPRO = I_PRODUIT;
+    EXCEPTION
+      WHEN OTHERS THEN
+        O_RET := 14;
+    END;
+  
+    COMMIT;
+  
+  END DELETE_PANIER;
+
+  PROCEDURE VALO_PANIER_GROUPE(I_TIERCOM IN COMDPANIER.CPR_IDTIERCOM%TYPE,
+                               I_TIERFOU IN COMDPANIER.CPR_IDTIERFOU%TYPE) IS
+  
+    CURSOR C_PANIER_GROUPE(I_TIERCOM IN COMDPANIER.CPR_IDTIERCOM%TYPE, I_TIERFOU IN COMDPANIER.CPR_IDTIERFOU%TYPE, I_GROUPE IN COMDPANIER.CPR_IDENTGAM%TYPE) IS
+    
+      select eg.pem_cext   CEXT,
+             eg.pem_id     IDGROUPE,
+             p.cpr_idlign  IDLIGN,
+             p.cpr_idpro   IDPRO,
+             p.cpr_quantip QUANTIP,
+             p.cpr_qvnht   QVNHT,
+             p.CPR_REMISEP REMISEPR
+        from comdpanier p, prodetgam dg, proentgam eg
+       where p.cpr_idpro = dg.pdm_idpro
+         and trunc(sysdate) between dg.pdm_ddeb and dg.pdm_dfin
+         and eg.pem_id = dg.pdm_identgam
+         and trunc(sysdate) between eg.pem_ddeb and eg.pem_dfin
+         and p.cpr_idtiercom = I_TIERCOM
+         and p.cpr_idtierfou = I_TIERFOU
+         and eg.pem_id = I_GROUPE;
+  
+    R_PANIER_GROUPE C_PANIER_GROUPE%ROWTYPE;
+  
+    CURSOR C_REMGLO_GROUPE(I_TIERCOM IN COMDPANIER.CPR_IDTIERCOM%TYPE, I_TIERFOU IN COMDPANIER.CPR_IDTIERFOU%TYPE) IS
+    
+      select sr.idgroupe      IDGROUPE,
+             sr.cext          CEXT,
+             fe.feo_label     LABEL,
+             fd.fdo_inf       PAL_INF,
+             fd.fdo_sup       PAL_SUP,
+             fd.fdo_oapp      OAPP,
+             fd.fpo_idprograt IDPROGRAT,
+             fd.fdo_montant   MONTANT,
+             fd.fdo_unite     UNITE,
+             fd.fdo_typass    TYPASS,
+             sr.squantip      SQUANTIP,
+             sr.squantim      SQUANTIM,
+             sr.sqvnht        SQVNHT,
+             fe.feo_id        ID
+        from finentcondglo fe,
+             findetcondglo fd,
+             (select eg.pem_cext cext,
+                     eg.pem_id idgroupe,
+                     sum(p.cpr_quantip) squantip,
+                     sum(p.cpr_quantim) squantim,
+                     sum(p.cpr_qvnht) sqvnht
+                from comdpanier p, prodetgam dg, proentgam eg
+               where p.cpr_idpro = dg.pdm_idpro
+                 and trunc(sysdate) between dg.pdm_ddeb and dg.pdm_dfin
+                 and eg.pem_id = dg.pdm_identgam
+                 and trunc(sysdate) between eg.pem_ddeb and eg.pem_dfin
+                 and p.cpr_idtiercom = I_TIERCOM
+                 and p.cpr_idtierfou = I_TIERFOU
+               group by eg.pem_cext, eg.pem_id) sr,
+             (select tg.tep_id idgroupetier
+                from tieentgroup tg, tiedetgroup td
+               where tg.tep_id = td.tdp_idgroup
+                 and trunc(sysdate) between tg.tep_ddeb and tg.tep_dfin
+                 and tg.tep_type = TYPE_REM_GLO
+                 and td.tdp_idtier = I_TIERCOM) gr
+       where fe.feo_idgroutier = gr.idgroupetier
+         and fe.feo_idtierfou = I_TIERFOU
+         and fe.feo_idfam = sr.idgroupe
+         and fd.fpo_identconddet = fe.feo_id
+         and trunc(sysdate) between fe.feo_ddeb and fe.feo_dfin
+       order by fd.fdo_oapp desc;
+  
+    R_REMGLO_GROUPE C_REMGLO_GROUPE%ROWTYPE;
+  
+    RET            NUMBER := 0;
+    QUANTITE       NUMBER := 0;
+    TVA            NUMBER := 0;
+    VALEUR         NUMBER(15, 5) := 0;
+    TOTAL_REM      NUMBER(15, 5) := 0;
+    PREMIER_INSERT BOOLEAN := TRUE;
+  
+  BEGIN
+  
+    BEGIN
+    
+      RET := 0;
+    
+      OPEN C_REMGLO_GROUPE(I_TIERCOM, I_TIERFOU);
+      FETCH C_REMGLO_GROUPE
+        INTO R_REMGLO_GROUPE;
+      WHILE C_REMGLO_GROUPE%FOUND LOOP
+      
+        EXIT WHEN C_REMGLO_GROUPE%NOTFOUND;
+      
+        /* Valeur pour comdpanierrem*/
+        TOTAL_REM      := 0;
+        PREMIER_INSERT := TRUE;
+      
+        OPEN C_PANIER_GROUPE(I_TIERCOM,
+                             I_TIERFOU,
+                             R_REMGLO_GROUPE.IDGROUPE);
+        FETCH C_PANIER_GROUPE
+          INTO R_PANIER_GROUPE;
+        WHILE C_PANIER_GROUPE%FOUND LOOP
+        
+          EXIT WHEN C_PANIER_GROUPE%NOTFOUND;
+        
+          IF (R_REMGLO_GROUPE.SQUANTIP IS NOT NULL AND
+             R_REMGLO_GROUPE.SQVNHT IS NOT NULL) THEN
+          
+            /* Type de quantite consideree: en piece ou en valeur */
+            QUANTITE := 0;
+            IF (R_REMGLO_GROUPE.TYPASS = 0) THEN
+              QUANTITE := R_REMGLO_GROUPE.SQUANTIP;
+            
+            ELSIF (R_REMGLO_GROUPE.TYPASS = 1) THEN
+              QUANTITE := R_REMGLO_GROUPE.SQUANTIP;/*SQVNHT;*/
+            ELSE
+              /* si pas precise, alors en piece */
+              QUANTITE := R_REMGLO_GROUPE.SQUANTIP;
+            END IF;
+          
+            VALEUR := 0;
+            /* Remise en pourcentage */
+            IF R_REMGLO_GROUPE.UNITE = R_POURCENTAGE THEN
+             IF (R_PANIER_GROUPE.REMISEPR IS NULL) THEN--si la remise est null donc les produits sont remisés par groupe
+              IF (R_REMGLO_GROUPE.PAL_INF = 0 AND
+                 R_REMGLO_GROUPE.PAL_SUP IS NULL) THEN
+                /* calcul de la remise sur le seul palier */
+                VALEUR := R_PANIER_GROUPE.QVNHT *
+                          (ABS(R_REMGLO_GROUPE.MONTANT) / 100);
+              ELSIF (R_REMGLO_GROUPE.PAL_INF <= QUANTITE AND
+                    QUANTITE <= R_REMGLO_GROUPE.PAL_SUP) THEN
+                /* calcul de la remise en considerant les 2 seuils */
+                VALEUR := R_PANIER_GROUPE.QVNHT *
+                          (ABS(R_REMGLO_GROUPE.MONTANT) / 100);
+              
+              ELSIF (R_REMGLO_GROUPE.PAL_INF > 0 AND
+                    R_REMGLO_GROUPE.PAL_SUP IS NULL AND
+                    QUANTITE >= R_REMGLO_GROUPE.PAL_INF) THEN
+                /* calcul de la remise sur le dernier palier */
+                VALEUR := R_PANIER_GROUPE.QVNHT *
+                          (ABS(R_REMGLO_GROUPE.MONTANT) / 100);
+              
+              END IF;
+             ELSE  --sinon les produits sont remisés individuellement remise inserée dans INSERT_PANIER(produit gamme R)
+              VALEUR := R_PANIER_GROUPE.QVNHT *(ABS(R_PANIER_GROUPE.REMISEPR) / 100);
+             END IF;
+            END IF;
+            /* Remise en monnaie de base a l'unite */
+            IF R_REMGLO_GROUPE.UNITE = R_MONNAIE THEN
+            
+              IF (R_REMGLO_GROUPE.PAL_INF = 0 AND
+                 R_REMGLO_GROUPE.PAL_SUP IS NULL) THEN
+              
+                /* calcul de la remise sur le seul palier */
+                VALEUR := (ABS(R_REMGLO_GROUPE.MONTANT));
+              
+              ELSIF (R_REMGLO_GROUPE.PAL_INF <= QUANTITE AND
+                    QUANTITE <= R_REMGLO_GROUPE.PAL_SUP) THEN
+              
+                /* calcul de la remise en considerant les 2 seuils */
+                VALEUR := (ABS(R_REMGLO_GROUPE.MONTANT));
+              
+              ELSIF (R_REMGLO_GROUPE.PAL_INF > 0 AND
+                    R_REMGLO_GROUPE.PAL_SUP IS NULL AND
+                    QUANTITE >= R_REMGLO_GROUPE.PAL_INF) THEN
+              
+                /* calcul de la remise sur le dernier palier */
+                VALEUR := (ABS(R_REMGLO_GROUPE.MONTANT));
+              
+              END IF;
+            END IF;
+          
+            /* Remise en gratuit */
+            IF R_REMGLO_GROUPE.UNITE = R_GRATUIT THEN
+            
+              IF (R_REMGLO_GROUPE.PAL_INF = 0 AND
+                 R_REMGLO_GROUPE.PAL_SUP IS NULL) THEN
+                /* calcul de la remise sur le seul palier */
+                VALEUR := (ABS(R_REMGLO_GROUPE.MONTANT));
+              ELSIF (R_REMGLO_GROUPE.PAL_INF <= QUANTITE AND
+                    QUANTITE <= R_REMGLO_GROUPE.PAL_SUP) THEN
+                /* calcul de la remise en considerant les 2 seuils */
+                VALEUR := (ABS(R_REMGLO_GROUPE.MONTANT));
+              
+              ELSIF (R_REMGLO_GROUPE.PAL_INF > 0 AND
+                    R_REMGLO_GROUPE.PAL_SUP IS NULL AND
+                    QUANTITE >= R_REMGLO_GROUPE.PAL_INF) THEN
+                /* calcul de la remise sur le dernier palier */
+                VALEUR := (ABS(R_REMGLO_GROUPE.MONTANT));
+              
+              END IF;
+            
+            END IF;
+          
+            IF (VALEUR > 0 AND R_REMGLO_GROUPE.UNITE != R_GRATUIT) THEN
+              /* on met a jour les donnees dans le panier */
+              /* il faut aussi recalculer la TVA */
+              IF (PKCOMMANDE.MAJ_LIGNE_PANIER_GLO(R_PANIER_GROUPE.IDLIGN,
+                                                  R_REMGLO_GROUPE.UNITE,
+                                                  VALEUR) = 0) THEN
+                RET := PKCOMMANDE.CALC_TVA_LIGNE_PANIER(R_PANIER_GROUPE.IDLIGN);
+                IF RET != 0 THEN
+                  dbms_output.put_line('Probleme CALC_TVA_LIGNE_PANIER pour le groupe');
+                END IF;
+              ELSE
+                dbms_output.put_line('Probleme MAJ_LIGNE_PANIER pour le groupe');
+              END IF;
+            
+            ELSIF (VALEUR > 0 AND R_REMGLO_GROUPE.UNITE = R_GRATUIT) THEN
+            /*pas possible traité dans valo_panier_all_lignes Amine*/
+              /* on va sauvegarder la quantite de gratuit (calculee sur la base du groupe)
+                 au niveau de la ligne de l'article gratuit. 
+              */
+            
+              IF (PREMIER_INSERT) THEN
+              
+                PREMIER_INSERT := FALSE;
+                /* on met a jour les donnees dans le panier */
+                IF (PKCOMMANDE.MAJ_LIGNE_PANIER(R_PANIER_GROUPE.IDLIGN,
+                                                R_REMGLO_GROUPE.UNITE,
+                                                VALEUR) = 0) THEN
+                
+                  RET := PKCOMMANDE.SAVE_REM_DET_PANIER(I_TIERCOM,
+                                                        I_TIERFOU,
+                                                        R_REMGLO_GROUPE.ID,
+                                                        R_PANIER_GROUPE.IDPRO,
+                                                        R_REMGLO_GROUPE.LABEL,
+                                                        R_REMGLO_GROUPE.PAL_INF,
+                                                        R_REMGLO_GROUPE.PAL_SUP,
+                                                        R_REMGLO_GROUPE.MONTANT,
+                                                        R_REMGLO_GROUPE.UNITE,
+                                                        VALEUR,
+                                                        R_REMGLO_GROUPE.IDPROGRAT,
+                                                        R_REMGLO_GROUPE.TYPASS,
+                                                        R_PANIER_GROUPE.IDLIGN,
+                                                        QUANTITE);
+                  IF RET != 0 THEN
+                    dbms_output.put_line('Probleme SAVE_REM_DET_PANIER');
+                  END IF;
+                
+                  /* Pas besoin de recalculer la TVA, on n'a fait qu'ajouter une quantite de gratuit*/
+                
+                ELSE
+                  dbms_output.put_line('Probleme MAJ_LIGNE_PANIER');
+                END IF;
+              
+              END IF;
+            
+              /*FIN AUREL*/
+            
+            END IF;
+          
+          END IF;
+        
+          IF (R_REMGLO_GROUPE.UNITE != R_GRATUIT) THEN
+            TOTAL_REM := TOTAL_REM + VALEUR;
+          ELSIF (R_REMGLO_GROUPE.UNITE = R_GRATUIT) THEN
+            TOTAL_REM := VALEUR;
+          END IF;
+        
+          FETCH C_PANIER_GROUPE
+            INTO R_PANIER_GROUPE;
+        END LOOP;
+      
+        IF C_PANIER_GROUPE%ISOPEN THEN
+          CLOSE C_PANIER_GROUPE;
+        END IF;
+      
+        /* avant de checker pour les autres remises, on va conserver 
+        les donnees dans comdpanierrem */
+        IF (TOTAL_REM > 0) THEN
+          RET := PKCOMMANDE.SAVE_REM_GROUPE_PANIER(I_TIERCOM,
+                                                   I_TIERFOU,
+                                                   R_REMGLO_GROUPE.ID,
+                                                   R_REMGLO_GROUPE.LABEL,
+                                                   R_REMGLO_GROUPE.PAL_INF,
+                                                   R_REMGLO_GROUPE.PAL_SUP,
+                                                   R_REMGLO_GROUPE.MONTANT,
+                                                   R_REMGLO_GROUPE.UNITE,
+                                                   TOTAL_REM,
+                                                   R_REMGLO_GROUPE.IDPROGRAT,
+                                                   R_REMGLO_GROUPE.TYPASS,
+                                                   R_REMGLO_GROUPE.IDGROUPE,
+                                                   QUANTITE);
+        END IF;
+      
+        FETCH C_REMGLO_GROUPE
+          INTO R_REMGLO_GROUPE;
+      END LOOP;
+    
+      IF C_REMGLO_GROUPE%ISOPEN THEN
+        CLOSE C_REMGLO_GROUPE;
+      END IF;
+    
+      COMMIT;
+    
+    END;
+  
+  END VALO_PANIER_GROUPE;
+
+  FUNCTION SAVE_REM_GROUPE_PANIER(I_TIERCOM COMDPANIER.CPR_IDTIERCOM%TYPE,
+                                  I_TIERFOU COMDPANIER.CPR_IDTIERFOU%TYPE,
+                                  ID        FINENTCONDDET.FET_ID%TYPE,
+                                  LABEL     FINENTCONDDET.FET_LABEL%TYPE,
+                                  PAL_INF   FINDETCONDDET.FDT_INF%TYPE,
+                                  PAL_SUP   FINDETCONDDET.FDT_SUP%TYPE,
+                                  MONTANT   FINDETCONDDET.FDT_MONTANT%TYPE,
+                                  UNITE     FINDETCONDDET.FDT_UNITE%TYPE,
+                                  VALEUR    NUMBER,
+                                  PRO_GRAT  FINDETCONDDET.FDT_IDPROGRAT%TYPE,
+                                  TYP_ASS   FINDETCONDDET.FDT_TYPASS%TYPE,
+                                  ID_GROUPE FINENTCONDGLO.FEO_IDFAM%TYPE,
+                                  BASE      COMDPANIERREM.CPM_BASE%TYPE)
+  
+   RETURN NUMBER IS
+    O_RET NUMBER;
+  
+  BEGIN
+  
+    O_RET := 0;
+  
+    BEGIN
+    
+      INSERT INTO comdpanierrem
+        (cpm_idtiercom,
+         cpm_idtierfou,
+         cpm_idrem,
+         cpm_idpro,
+         cpm_label,
+         cpm_inf,
+         cpm_sup,
+         cpm_montant,
+         cpm_unite,
+         cpm_valeur,
+         cpm_dcre,
+         cpm_dmaj,
+         cpm_util,
+         cpm_typass,
+         cpm_prograt,
+         cpm_idligne,
+         cpm_idgroupe,
+         cpm_base)
+      VALUES
+        (I_TIERCOM,
+         I_TIERFOU,
+         ID,
+         NULL,
+         LABEL,
+         PAL_INF,
+         PAL_SUP,
+         MONTANT,
+         UNITE,
+         VALEUR,
+         sysdate,
+         sysdate,
+         'VALO_PANIER',
+         TYP_ASS,
+         PRO_GRAT,
+         NULL,
+         ID_GROUPE,
+         BASE);
+    EXCEPTION
+      WHEN NO_DATA_FOUND THEN
+        O_RET := 2;
+      WHEN OTHERS THEN
+        O_RET := 3;
+    END;
+  
+    RETURN O_RET;
+  
+  END SAVE_REM_GROUPE_PANIER;
+
+  PROCEDURE RAZ_PANIER(I_TIERCOM IN NUMBER, I_TIERFOU IN NUMBER) IS
+    O_RET NUMBER;
+  
+  BEGIN
+  
+    BEGIN
+      /* il faut initialiser la valeur du montant net*/
+      O_RET := 0;
+    
+      BEGIN
+        /* Remise en % */
+        UPDATE comdpanier t
+           SET t.cpr_qvnht   = t.cpr_qvbht,
+               t.cpr_qvnttc  = t.cpr_qvbttc,
+               t.cpr_qgligne = 0,
+               t.cpr_util    = 'RAZ_PANIER',
+               t.cpr_mbtva   = 0,
+               t.cpr_mntva   = 0,
+               t.cpr_qvnnht  = 0,
+               t.cpr_qvnnttc = 0,
+               t.cpr_qgpied  = 0,
+               t.cpr_dmaj    = sysdate
+         WHERE t.cpr_idtiercom = I_TIERCOM
+           and t.cpr_idtierfou = I_TIERFOU;
+      EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+          O_RET := 2;
+        WHEN OTHERS THEN
+          O_RET := 3;
+      END;
+    
+      BEGIN
+        /* Remise en % */
+        DELETE comdpanierrem t
+         WHERE t.cpm_idtiercom = I_TIERCOM
+           and t.cpm_idtierfou = I_TIERFOU;
+      EXCEPTION
+        WHEN OTHERS THEN
+          O_RET := 5;
+      END;
+    
+    END;
+  
+  END RAZ_PANIER;
+  
+  
+  PROCEDURE DELETE_PROD_DESAC_PANIER(I_TIERCOM IN NUMBER, I_TIERFOU IN NUMBER) IS
+    O_RET NUMBER;
+  
+  BEGIN
+  
+    BEGIN
+      /* il faut supprimer les produits désactivés depuis la date de création du panier*/
+      O_RET := 0;
+       
+    
+      BEGIN
+         
+        DELETE comdpanier t
+         WHERE t.cpr_idtiercom = I_TIERCOM
+           and t.cpr_idtierfou = I_TIERFOU
+           and t.cpr_idpro in 
+           (select pg.pde_id from prodlabel la  ,prodgene pg 
+            where   la.pll_idpro = pg.pde_id   
+            and trunc(sysdate) not between la.pll_ddeb and la.pll_dfin 
+            or   pg.pde_status=1 
+             );
+      EXCEPTION
+        WHEN OTHERS THEN
+          O_RET := 2;
+      END;
+    
+    END;
+  
+  END DELETE_PROD_DESAC_PANIER;
+  
+
+  PROCEDURE VALO_PANIER_ALL_LIGNES(I_TIERCOM COMDPANIER.CPR_IDTIERCOM%TYPE,
+                                   I_TIERFOU COMDPANIER.CPR_IDTIERFOU%TYPE) IS
+  
+    CURSOR C_PANIER(I_TIERCOM IN COMDPANIER.CPR_IDTIERCOM%TYPE, I_TIERFOU IN COMDPANIER.CPR_IDTIERFOU%TYPE) IS
+    
+      select CR.CPR_IDLIGN
+        from comdpanier cr
+       WHERE CR.CPR_IDTIERCOM = I_TIERCOM
+         AND CR.CPR_IDTIERFOU = I_TIERFOU;
+  
+    R_PANIER C_PANIER%ROWTYPE;
+  
+    O_RET NUMBER;
+  
+  BEGIN
+  
+    O_RET := 0;
+  
+    BEGIN
+    
+      OPEN C_PANIER(I_TIERCOM, I_TIERFOU);
+      FETCH C_PANIER
+        INTO R_PANIER;
+      WHILE C_PANIER%FOUND LOOP
+      
+        EXIT WHEN C_PANIER%NOTFOUND;
+      
+        IF (PKCOMMANDE.VALO_LIGNE_PANIER(R_PANIER.CPR_IDLIGN) = 0) THEN
+          O_RET := 0;
+        ELSE
+          dbms_output.put_line('probleme a la maj de la ligne du panier ' ||
+                               R_PANIER.CPR_IDLIGN);
+          O_RET := -1;
+        END IF;
+      
+        FETCH C_PANIER
+          INTO R_PANIER;
+      END LOOP;
+    
+      IF C_PANIER%ISOPEN THEN
+        CLOSE C_PANIER;
+      END IF;
+    
+    END;
+  
+    COMMIT;
+  
+  END VALO_PANIER_ALL_LIGNES;
+
+  FUNCTION CHECK_FRANCO(I_TIERCOM COMDPANIER.CPR_IDTIERCOM%TYPE,
+                        I_TIERFOU COMDPANIER.CPR_IDTIERFOU%TYPE)
+    RETURN NUMBER IS
+  
+    CURSOR C_FRANCO(I_TIERCOM COMDPANIER.CPR_IDTIERCOM%TYPE, I_TIERFOU COMDPANIER.CPR_IDTIERFOU%TYPE) IS
+    
+      SELECT sum(c.cpr_quantip) QUANTITE, c.cpr_identgam IDGAM
+        FROM comdpanier c
+       WHERE c.cpr_idtiercom = I_TIERCOM
+         AND c.cpr_idtierfou = I_TIERFOU
+       GROUP BY c.cpr_identgam
+       ORDER BY c.cpr_identgam ASC;
+  
+    R_FRANCO C_FRANCO%ROWTYPE;
+  
+    O_RET     NUMBER;
+    GROUPE_R  NUMBER;
+    GROUPE_NR NUMBER;
+    R_OK      NUMBER;
+    NR_OK     NUMBER;
+  
+  BEGIN
+  
+    O_RET     := 0;
+    GROUPE_R  := 1;
+    GROUPE_NR := 2;
+    R_OK      := 0;
+    NR_OK     := 0;
+  
+    OPEN C_FRANCO(I_TIERCOM, I_TIERFOU);
+    FETCH C_FRANCO
+      INTO R_FRANCO;
+    WHILE C_FRANCO%FOUND LOOP
+      EXIT WHEN C_FRANCO%NOTFOUND;
+    
+      IF (R_FRANCO.IDGAM = 1) THEN
+        IF (R_FRANCO.QUANTITE >= FRANCO_R) THEN
+          R_OK  := 1;
+          NR_OK := 1;
+        END IF;
+      ELSIF (R_FRANCO.IDGAM = 2) THEN
+        IF (R_FRANCO.QUANTITE >= FRANCO_NR) THEN
+          NR_OK := 1;
+        END IF;
+      END IF;
+    
+      FETCH C_FRANCO
+        INTO R_FRANCO;
+    END LOOP;
+  
+    IF C_FRANCO%ISOPEN THEN
+      CLOSE C_FRANCO;
+    END IF;
+  
+    IF (R_OK = 0) THEN
+    
+      BEGIN
+      
+        DELETE COMDPANIER CR
+         WHERE CR.CPR_IDTIERCOM = I_TIERCOM
+           AND CR.CPR_IDTIERFOU = I_TIERFOU
+           AND CR.CPR_IDENTGAM = 1;
+      EXCEPTION
+        WHEN OTHERS THEN
+          O_RET := 2;
+        
+      END;
+    END IF;
+  
+    IF (NR_OK = 0) THEN
+    
+      BEGIN
+      
+        DELETE COMDPANIER CR
+         WHERE CR.CPR_IDTIERCOM = I_TIERCOM
+           AND CR.CPR_IDTIERFOU = I_TIERFOU
+           AND CR.CPR_IDENTGAM = 2;
+      
+      EXCEPTION
+        WHEN OTHERS THEN
+          O_RET := 4;
+        
+      END;
+    END IF;
+  
+    RETURN O_RET;
+  
+  END CHECK_FRANCO;
+
+  PROCEDURE FLUSH_COMMANDE(I_COMMANDE COMENTCDE.CEE_ID%TYPE) IS
+  
+    O_RET NUMBER;
+  
+  BEGIN
+  
+    O_RET := 0;
+  
+    IF CHECK_STATUT_COMMANDE(I_COMMANDE) < 2 THEN 
+  
+      BEGIN
+      
+        DELETE COMDETCDE CDE WHERE CDE.CDE_IDCDE = I_COMMANDE;
+      EXCEPTION
+        WHEN OTHERS THEN
+          O_RET := 2;
+        
+      END;
+    
+      BEGIN
+      
+        DELETE COMREMCDE CRE WHERE CRE.CRE_IDENTETE = I_COMMANDE;
+      EXCEPTION
+        WHEN OTHERS THEN
+          O_RET := 4;
+        
+      END;
+    
+      BEGIN
+      
+        DELETE COMPIEDCDE CPE WHERE CPE.CPE_IDENTCDE = I_COMMANDE;
+      EXCEPTION
+        WHEN OTHERS THEN
+          O_RET := 6;
+        
+      END;
+    
+      BEGIN
+      
+        DELETE COMENTCDE CEE WHERE CEE.CEE_ID = I_COMMANDE;
+      EXCEPTION
+        WHEN OTHERS THEN
+          O_RET := 8;
+        
+      END;
+      COMMIT;
+    END IF;
+  
+  END FLUSH_COMMANDE;
+
+  PROCEDURE FLUSH_REM_EX(I_TIERCOM COMDPANIER.CPR_IDTIERCOM%TYPE,
+                         I_TIERFOU COMDPANIER.CPR_IDTIERFOU%TYPE) IS
+  
+    O_RET NUMBER;
+  
+  BEGIN
+  
+    O_RET := 0;
+  
+    BEGIN
+    
+      DELETE COMDPANIERREM_EX CDX
+       WHERE CDX.CDX_IDTIERFOU = I_TIERFOU
+         and CDX.CDX_IDTIERCOM = I_TIERCOM;
+    EXCEPTION
+      WHEN OTHERS THEN
+        O_RET := 2;
+      
+    END;
+  
+    COMMIT;
+  
+  END FLUSH_REM_EX;
+
+  PROCEDURE INSERT_REM_EX(I_TIERCOM COMDPANIER.CPR_IDTIERCOM%TYPE,
+                          I_TIERFOU COMDPANIER.CPR_IDTIERFOU%TYPE,
+                          I_REMISE  COMDPANIERREM_EX.CDX_IDREM%TYPE,
+                          I_NEWVAL  COMDPANIERREM_EX.CDX_NEWVAL%TYPE,
+                          I_DESC    COMDPANIERREM_EX.CDX_DESC%TYPE,
+                          I_IDLOV   COMDPANIERREM_EX.CDX_IDLOV%TYPE) IS
+  
+    O_RET NUMBER;
+  
+  BEGIN
+  
+    O_RET := 0;
+  
+    BEGIN
+    
+      INSERT INTO COMDPANIERREM_EX
+        (CDX_IDREM,
+         CDX_IDTIERFOU,
+         CDX_IDTIERCOM,
+         CDX_NEWVAL,
+         CDX_DCRE,
+         CDX_UTIL,
+         CDX_DESC,
+         CDX_IDLOV)
+      VALUES
+        (I_REMISE,
+         I_TIERFOU,
+         I_TIERCOM,
+         I_NEWVAL,
+         sysdate,
+         'INSERT_EX',
+         I_DESC,
+         I_IDLOV);
+    EXCEPTION
+      WHEN OTHERS THEN
+        O_RET := 2;
+      
+    END;
+  
+    COMMIT;
+  
+  END INSERT_REM_EX;
+
+  PROCEDURE CONFIRM_COMMANDE(I_COMMANDE COMENTCDE.CEE_ID%TYPE) IS
+  
+    O_RET NUMBER;
+  
+  BEGIN
+  
+    O_RET := 0;
+  
+    BEGIN
+    
+      UPDATE COMENTCDE CDE
+         SET CDE.CEE_STATUT = STATUT_CONFIRMEE_2,
+             CDE.CEE_DMAJ   = SYSDATE,
+             CDE.CEE_UTIL   = 'CONF_COM'
+       WHERE CDE.CEE_ID = I_COMMANDE;
+    EXCEPTION
+      WHEN OTHERS THEN
+        O_RET := 2;
+      
+    END;
+  
+    COMMIT;
+  
+  END CONFIRM_COMMANDE;
+
+  PROCEDURE FLUSH_PANIER_PROC(I_TIERCOM COMDPANIER.CPR_IDTIERCOM%TYPE,
+                              I_TIERFOU COMDPANIER.CPR_IDTIERFOU%TYPE) IS
+  
+    O_RET NUMBER;
+  
+  BEGIN
+  
+    O_RET := 0;
+  
+    BEGIN
+      DELETE COMDPANIER CR
+       WHERE CR.CPR_IDTIERCOM = I_TIERCOM
+         AND CR.CPR_IDTIERFOU = I_TIERFOU;
+    EXCEPTION
+      WHEN OTHERS THEN
+        O_RET := 8;
+    END;
+  
+    BEGIN
+      DELETE COMDPANIERREM CRR
+       WHERE CRR.CPM_IDTIERCOM = I_TIERCOM
+         AND CRR.CPM_IDTIERFOU = I_TIERFOU;
+    EXCEPTION
+      WHEN OTHERS THEN
+        O_RET := 14;
+    END;
+  
+    BEGIN
+      DELETE COMDPANIERREM_EX CRX
+       WHERE CRX.CDX_IDTIERCOM = I_TIERCOM
+         AND CRX.CDX_IDTIERFOU = I_TIERFOU;
+    EXCEPTION
+      WHEN OTHERS THEN
+        O_RET := 26;
+    END;
+  
+    COMMIT;
+  
+  END FLUSH_PANIER_PROC;
+
+  PROCEDURE DUPLIQUE_COMMANDE(I_TIERCOM COMDPANIER.CPR_IDTIERCOM%TYPE,
+                              I_TIERFOU COMDPANIER.CPR_IDTIERFOU%TYPE,
+                              I_COMID   COMENTCDE.CEE_ID%TYPE,
+                              I_UTIL    TIEUTIL.TUL_ID%TYPE) IS
+  
+    O_RET NUMBER;
+  
+    CURSOR C_COMMANDE_ORIGINE(I_TIERCOM COMDPANIER.CPR_IDTIERCOM%TYPE, I_TIERFOU COMDPANIER.CPR_IDTIERFOU%TYPE, I_COMID COMENTCDE.CEE_ID%TYPE) IS
+    
+      select cde.cde_idpro IDPRO, cde.cde_quantip QUANTIP
+        from comdetcde cde, comentcde ede
+       where ede.cee_id = I_COMID
+         and ede.cee_idtiercom = I_TIERCOM
+         and ede.cee_idtierfou = I_TIERFOU
+         and cde.cde_idcde = ede.cee_id;
+  
+    R_COMMANDE_ORIGINE C_COMMANDE_ORIGINE%ROWTYPE;
+  
+  BEGIN
+  
+    O_RET := 0;
+  
+    IF (FLUSH_PANIER(I_TIERCOM, I_TIERFOU) = 0) THEN
+    
+      OPEN C_COMMANDE_ORIGINE(I_TIERCOM, I_TIERFOU, I_COMID);
+      FETCH C_COMMANDE_ORIGINE
+        INTO R_COMMANDE_ORIGINE;
+      WHILE C_COMMANDE_ORIGINE%FOUND LOOP
+        EXIT WHEN C_COMMANDE_ORIGINE%NOTFOUND;
+      
+        INSERT_PANIER(I_TIERCOM,
+                      I_TIERFOU,
+                      R_COMMANDE_ORIGINE.IDPRO,
+                      R_COMMANDE_ORIGINE.QUANTIP,
+                      I_UTIL);
+      
+        FETCH C_COMMANDE_ORIGINE
+          INTO R_COMMANDE_ORIGINE;
+      END LOOP;
+    
+      IF C_COMMANDE_ORIGINE%ISOPEN THEN
+        CLOSE C_COMMANDE_ORIGINE;
+      END IF;
+    
+      BEGIN
+      
+        FLUSH_REM_EX(I_TIERCOM, I_TIERFOU);
+      
+        /*   RAZ_PANIER(I_TIERCOM, I_TIERFOU);
+        
+        VALO_PANIER_ALL_LIGNES(I_TIERCOM, I_TIERFOU);
+        
+        VALO_PANIER_GROUPE(I_TIERCOM, I_TIERFOU);
+        
+        VALO_PANIER_GLO(I_TIERCOM, I_TIERFOU);*/
+      
+      END;
+    
+    ELSE
+      O_RET := 50;
+      dbms_output.put_line('probleme durant le flush du panier ');
+    END IF;
+  
+    COMMIT;
+  
+  END DUPLIQUE_COMMANDE;
+
+  PROCEDURE PREPARE_PANIER(I_TIERCOM COMDPANIER.CPR_IDTIERCOM%TYPE,
+                           I_TIERFOU COMDPANIER.CPR_IDTIERFOU%TYPE) IS
+    O_RET NUMBER := 0;
+  
+  BEGIN
+  
+    BEGIN
+      PKCOMMANDE.DELETE_PROD_DESAC_PANIER(I_TIERCOM, I_TIERFOU);
+    EXCEPTION
+      WHEN OTHERS THEN
+        O_RET := 100;
+        dbms_output.put_line('Erreur DELETE_PROD_DESAC_PANIER O_RET --> ' || O_RET);
+    END;
+  
+    BEGIN
+      PKCOMMANDE.RAZ_PANIER(I_TIERCOM, I_TIERFOU);
+    EXCEPTION
+      WHEN OTHERS THEN
+        O_RET := 100;
+        dbms_output.put_line('Erreur RAZ_PANIER O_RET --> ' || O_RET);
+    END;
+  
+    BEGIN
+      PKCOMMANDE.VALO_PANIER_ALL_LIGNES(I_TIERCOM, I_TIERFOU);
+    EXCEPTION
+      WHEN OTHERS THEN
+        O_RET := 110;
+        dbms_output.put_line('Erreur VALO_PANIER_ALL_LIGNES --> ' || O_RET);
+    END;
+  
+    BEGIN
+      PKCOMMANDE.VALO_PANIER_GROUPE(I_TIERCOM, I_TIERFOU);
+    EXCEPTION
+      WHEN OTHERS THEN
+        O_RET := 110;
+        dbms_output.put_line('Erreur VALO_PANIER_GROUPE --> ' || O_RET);
+    END;
+  
+    BEGIN
+      PKCOMMANDE.VALO_PANIER_GLO(I_TIERCOM, I_TIERFOU);
+    EXCEPTION
+      WHEN OTHERS THEN
+        O_RET := 110;
+        dbms_output.put_line('Erreur VALO_PANIER_GLO --> ' || O_RET);
+    END;
+  
+  END PREPARE_PANIER;
+
+  FUNCTION CHECK_STATUT_COMMANDE(I_COMMANDE COMENTCDE.CEE_ID%TYPE)
+    RETURN NUMBER IS
+  
+    O_RET NUMBER;
+  
+  BEGIN
+  
+    O_RET := 0;
+  
+    BEGIN
+    
+      SELECT CDE.CEE_STATUT
+        INTO O_RET
+        FROM COMENTCDE CDE
+       WHERE CDE.CEE_ID = I_COMMANDE;
+    EXCEPTION
+      WHEN NO_DATA_FOUND THEN
+        O_RET := -1;
+      WHEN OTHERS THEN
+        O_RET := -1;
+      
+    END;
+  
+    RETURN O_RET;
+  
+  END CHECK_STATUT_COMMANDE;
+
+/*PROCEDURE SECTO(  I_TIERCOM COMDPANIER.CPR_IDTIERCOM%TYPE) IS
+   
+  O_RET       NUMBER;
+
+  CURSOR C_TMP IS
+      
+  select tmp.idpartner  IDPARTNER, 
+         tmp.tdn_idtier IDTIER
+  from TMP_DP tmp;
+
+  R_TMP C_TMP%ROWTYPE;
+  
+  BEGIN
+  
+      O_RET := 0;
+
+      
+          OPEN C_TMP;
+          FETCH C_TMP
+          INTO R_TMP;
+          WHILE C_TMP%FOUND LOOP
+          EXIT WHEN C_TMP%NOTFOUND; 
+          
+               update tiepartner p 
+               set p.tpr_idtier = R_TMP.IDTIER,
+               p.tpr_util = 'TMP',
+               p.tpr_dmaj = sysdate
+               where p.tpr_id = R_TMP.IDPARTNER;
+                  
+          FETCH C_TMP
+          INTO R_TMP;
+          END LOOP;
+    
+          IF C_TMP%ISOPEN THEN
+             CLOSE C_TMP;
+          END IF;        
+
+      COMMIT;
+
+END SECTO;*/
+
+END PKCOMMANDE;

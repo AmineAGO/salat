@@ -1,0 +1,521 @@
+package dz.aggoun.prayer.houres;
+
+import java.awt.AWTException;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Container;
+import java.awt.Dimension;
+import java.awt.Frame;
+import java.awt.GraphicsConfiguration;
+import java.awt.GraphicsDevice;
+import java.awt.GraphicsEnvironment;
+import java.awt.GridLayout;
+import java.awt.Robot;
+import java.awt.Toolkit;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Properties;
+
+import javax.swing.BorderFactory;
+import javax.swing.ImageIcon;
+import javax.swing.JFrame;
+import javax.swing.JPanel;
+import javax.swing.border.MatteBorder;
+
+import dz.aggoun.prayer.houres.data.Horaire;
+import dz.aggoun.prayer.houres.data.Jour;
+import dz.aggoun.prayer.houres.data.Mosquee;
+import dz.aggoun.prayer.houres.tools.CsvFile;
+import dz.aggoun.prayer.houres.tools.CsvFileHelper;
+
+public class Principal extends Frame implements Runnable {
+	private Jour jour = new Jour();
+	private Mosquee mosquee= new Mosquee();
+	private Horaire sobh, chourouk, dohr, asr, maghreb, icha;
+	private Horaire salatNow,prochaineSalat;
+	private Calendar calendar = Calendar.getInstance();
+	private Date now;
+	private GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+	private GraphicsDevice[] gs = ge.getScreenDevices();
+	private GraphicsDevice gd;
+	private GraphicsConfiguration[] gc;
+	private JFrame f;
+	private Container contentPane;
+	private JPanel Entete;
+	private JPanel panelPrieres;
+	private JPanel DateHeure;
+	private JPanel panelIkama;
+	private JPanel panelAzane;
+	private JPanel panelPrieres1;
+	private JPanel panelPrieres2;
+	private JPanel panelPrieres3;
+	private JPanel panelPrieres4;
+	private JPanel panelPrieres5;
+	private int tempsNow;
+	private CsvFile fichierDuJour;
+	private CsvFile fichierMosquee;
+
+	final File file = new File("");
+	final ImageIcon image_off = new ImageIcon(file.getAbsolutePath()+ File.separator + "Images" + File.separator + "minaret_p.jpg");
+	final ImageIcon image_on = new ImageIcon(file.getAbsolutePath()	+ File.separator + "Images" + File.separator + "minaret_pr.jpg");
+	final ImageIcon image_v = new ImageIcon(file.getAbsolutePath()	+ File.separator + "Images" + File.separator + "salat.jpg");
+	final ImageIcon image_ikama = new ImageIcon(file.getAbsolutePath()+ File.separator + "Images" + File.separator + "phone.gif");
+	final ImageIcon image_azane = new ImageIcon(file.getAbsolutePath()+ File.separator + "Images" + File.separator + "azane.gif");
+
+	final MatteBorder yellow = BorderFactory.createMatteBorder(0, 3, 0, 3,Color.YELLOW);
+	final MatteBorder white = BorderFactory.createMatteBorder(0, 3, 0, 0,Color.WHITE);
+	final MatteBorder whiteleft = BorderFactory.createMatteBorder(0, 0, 0, 3,Color.WHITE);
+	private Color priereCouleur_off = new Color(7, 24, 36);
+	private Color priereCouleur_on = new Color(123, 53, 171);
+	private Color heureFond =  new Color(64,164,154);
+	private Color fondDouaa,fondInfo =  new Color(64,164,154);
+	private Color couleurDouaa,couleurInfo =  Color.WHITE;
+	private int hEcran;
+	private int periodeInfo=5,typeInfo=2;
+	private int dureeInfo=60;
+	private String joumoua="صلاة الجمعة على الساعة 13:00";
+	private int  joumouaH=13;
+	private int  joumouaM=0,deltaHijir=0;
+
+	private boolean premierLancement;
+	private int diffSec,infoApresInfo=1;
+	
+	private String fond_off = "#E2DAE8";
+	private String fond_on="#EDD600"  ;
+	private String couleurPoliceHeure="white"  ;
+	Thread tr;
+	Properties prop = new Properties();
+
+	public Principal(String type) throws IOException, AWTException {
+		
+		 
+		InputStream input = null;
+		premierLancement=true;
+		
+		try {
+if(type!=null)
+			{
+	input = new FileInputStream("config_tmp.properties");
+			}else {
+				input = new FileInputStream("config.properties");
+			}
+
+			// load a properties file
+			prop.load(new InputStreamReader(input, "UTF-8"));
+			
+			//fichierMosquee = new CsvFile(CsvFileHelper.getResource("mosquee.csv"));
+			mosquee = new Mosquee();//.mapToMosque(fichierMosquee.getSearchLine(0));
+ 
+			// get the property value and print it out
+		     mosquee.setNom(prop.getProperty("nommosquee"));
+		     mosquee.setVille(prop.getProperty("villemosquee"));
+		     mosquee.setCouleur(prop.getProperty("couleur_nom_mosquee"));
+		     fond_off=prop.getProperty("coleur_nom_priere_off");
+		     fond_on=prop.getProperty("coleur_nom_priere_on");
+		     couleurPoliceHeure=prop.getProperty("couleurPoliceHeure");
+		     priereCouleur_off=new Color(Integer.valueOf(prop.getProperty("fond_prierre_off_r").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_prierre_off_g").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_prierre_off_b").replace(" ", "")));
+		     priereCouleur_on=new Color(Integer.valueOf(prop.getProperty("fond_prierre_on_r").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_prierre_on_g").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_prierre_on_b").replace(" ", "")));
+		     heureFond=new Color(Integer.valueOf(prop.getProperty("fond_heure_on_r").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_heure_on_g").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_heure_on_b").replace(" ", "")));
+		     fondDouaa=new Color(Integer.valueOf(prop.getProperty("fond_douaa_r").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_douaa_g").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_douaa_b").replace(" ", "")));
+		     couleurDouaa=new Color(Integer.valueOf(prop.getProperty("couleur_douaa_r").replace(" ", "")),Integer.valueOf(prop.getProperty("couleur_douaa_g").replace(" ", "")),Integer.valueOf(prop.getProperty("couleur_douaa_b").replace(" ", "")));
+		     fondInfo=new Color(Integer.valueOf(prop.getProperty("fond_info_r").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_info_g").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_info_b").replace(" ", "")));
+		     couleurInfo=new Color(Integer.valueOf(prop.getProperty("couleur_info_r").replace(" ", "")),Integer.valueOf(prop.getProperty("couleur_info_g").replace(" ", "")),Integer.valueOf(prop.getProperty("couleur_info_b").replace(" ", "")));
+		     
+		     periodeInfo=Integer.valueOf(prop.getProperty("perdiodeInfo").replace(" ", ""));
+		 	 dureeInfo=Integer.valueOf(prop.getProperty("dureeInfo").replace(" ", ""));
+		 	 typeInfo=Integer.valueOf(prop.getProperty("typeInfo").replace(" ", ""));
+		 	 
+		 	joumoua= prop.getProperty("joumoua"); 
+		 	joumouaH= Integer.valueOf(prop.getProperty("joumouaH").replace(" ", ""));
+		 	joumouaM= Integer.valueOf(prop.getProperty("joumouaM").replace(" ", ""));
+		 	
+		 	deltaHijir= Integer.valueOf(prop.getProperty("deltaHijir").replace(" ", ""));
+
+		     
+		} catch (IOException ex) {
+			ex.printStackTrace();
+		} finally {
+			if (input != null) {
+				try {
+					input.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}}
+		
+		now = new Date();
+		calendar.setTime(now);
+		tempsNow = calendar.get(Calendar.HOUR_OF_DAY) * 60	+ calendar.get(Calendar.MINUTE);
+		diffSec=60-calendar.get(Calendar.SECOND);
+		infoApresInfo=1;
+		 		
+		Toolkit tk = Toolkit.getDefaultToolkit();  
+		int xSize = ((int) tk.getScreenSize().getWidth());  
+		int ySize = ((int) tk.getScreenSize().getHeight());  
+		hEcran=ySize;
+ 
+		System.out.println("Lancement du: "+now);
+				extraireInfosJour();
+				f = new JFrame();
+				contentPane = f.getContentPane();
+				f.setTitle("وقوت الصلاة");
+				contentPane.setLayout(new BorderLayout());
+
+				f.setSize(xSize,ySize);
+				 
+				f.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+				f.setBackground(Color.WHITE);
+
+				Entete = new EntetePanel().mettreEnForme(image_v,  mosquee ,hEcran,heureFond  );
+				DateHeure = new HeurePanel().mettreEnForme(hEcran,heureFond,couleurPoliceHeure,joumoua,deltaHijir);
+				miseEnFormePanelPrieres(); 
+				contentPane.add(Entete, BorderLayout.PAGE_START);
+				contentPane.add(panelPrieres, BorderLayout.CENTER);
+				contentPane.add(DateHeure, BorderLayout.PAGE_END);
+				if(type==null) 
+				{
+					f.setUndecorated(true);
+				}
+				f.setExtendedState(JFrame.MAXIMIZED_BOTH);
+				f.setVisible(true);
+				
+				//Déplacer le curseur de la souris en bas de la fenêtre
+				Robot robot = new Robot();
+		        robot.mouseMove(xSize, ySize);
+		        		  
+		        if (tr == null) {
+					tr = new Thread(this);
+					tr.start();
+				}
+			 
+		 
+	}
+
+	@Override
+	public void run() {
+		while (true) {
+
+			now = new Date();
+			calendar.setTime(now);
+			tempsNow = calendar.get(Calendar.HOUR_OF_DAY) * 60	+ calendar.get(Calendar.MINUTE);
+
+			if (tempsNow < 2) {
+				try {
+					extraireInfosJour();
+				} catch (IOException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				}
+			}
+
+			
+			 
+					 
+			if (tempsNow == sobh.getTempsEnMin()) {
+				salatNow = sobh;
+			} else if (tempsNow == dohr.getTempsEnMin()) {
+				salatNow = dohr;
+			} else if (tempsNow == asr.getTempsEnMin()) {
+				salatNow = asr;
+			} else if (tempsNow == maghreb.getTempsEnMin()) {
+				salatNow = maghreb;
+			} else if (tempsNow == icha.getTempsEnMin()) {
+				salatNow = icha;
+			} else {
+				salatNow = null;
+			}
+
+			miseEnFormePanelPrieres();
+
+			if (salatNow != null) {
+				panelAzane = new AzanePanel().mettreEnForme(image_azane,hEcran );
+				contentPane.remove(panelPrieres);
+				contentPane.remove(DateHeure);
+
+				contentPane.add(Entete, BorderLayout.PAGE_START);
+				contentPane.add(panelAzane, BorderLayout.CENTER);
+
+				contentPane.revalidate();
+				f.setExtendedState(JFrame.MAXIMIZED_BOTH);
+				f.setVisible(true);
+
+
+				try {
+					Thread.sleep(70000);
+					
+					contentPane.remove(panelPrieres);
+					contentPane.remove(panelAzane);
+					
+					JPanelTexteDefilant.scrollingText("Douaa", f,couleurDouaa,fondDouaa); 
+										
+					contentPane.revalidate();
+					f.setExtendedState(JFrame.MAXIMIZED_BOTH);
+					f.setVisible(true);
+					
+				} catch (InterruptedException e) {
+
+					e.printStackTrace();
+				}
+				
+				try {
+					Thread.sleep(30000);
+					contentPane.removeAll();
+					contentPane = f.getContentPane();
+					contentPane.setLayout(new BorderLayout());
+					
+					Entete = new EntetePanel().mettreEnForme(image_v,  mosquee ,hEcran ,heureFond );
+					contentPane.add(Entete, BorderLayout.PAGE_START);
+					
+					if(notDorhJoumou3a())
+					{	miseEnFormePanelPrieres();									
+						contentPane.add(panelPrieres, BorderLayout.CENTER);
+						contentPane.add(DateHeure, BorderLayout.PAGE_END);
+						contentPane.repaint();
+						contentPane.revalidate();
+						f.setExtendedState(JFrame.MAXIMIZED_BOTH);
+						f.setVisible(true);
+					}
+				} catch (InterruptedException e) {
+
+					e.printStackTrace();
+				}
+
+				try {
+					if(notDorhJoumou3a())
+					{ 
+						Thread.sleep((salatNow.getAttente_p() - 2) * 60000 + 20000);	
+						contentPane.remove(panelPrieres);
+						contentPane.remove(panelIkama);
+					} 
+					
+
+					try {
+						extraireInfosJour();
+					} catch (IOException e1) {
+
+						e1.printStackTrace();
+					}
+
+					 
+					 
+					miseEnFormePanelPrieres();
+					contentPane.add(panelPrieres, BorderLayout.CENTER);
+					contentPane.add(DateHeure, BorderLayout.PAGE_END);
+					contentPane.repaint();
+					contentPane.revalidate();
+					f.setExtendedState(JFrame.MAXIMIZED_BOTH);
+					f.setVisible(true);
+					Thread.sleep(1200000);//sleep 20 mins après ikama pour permettre salat sans defillement 
+					
+				} catch (InterruptedException e) {
+
+					e.printStackTrace();
+				}
+
+			}else {
+				 typeInfo=Integer.valueOf(prop.getProperty("typeInfo").replace(" ", ""));
+			 	 
+				if(typeInfo!=0){
+				if(calendar.get(Calendar.MINUTE)%periodeInfo==0){
+				contentPane.remove(panelPrieres);
+				contentPane.remove(Entete);
+				contentPane.remove(DateHeure);
+				if(!notDorhJoumou3a()){//forcer type 2 pour Dohr du Joumou3a
+					typeInfo=2;
+					
+				}
+				if(typeInfo==1)
+				{
+					JPanelTexteDefilant.scrollingText("Info", f,couleurInfo,fondInfo); 
+				}else{
+					if(prochaineSalat.getCompteur()==1)
+					{
+						JPanelTexteDefilant.scrollingText(prochaineSalat.getFileDouaa(), f,couleurInfo,prochaineSalat.getCouleurDouaa());
+						prochaineSalat.setCompteur(2);
+					}else{
+						JPanelTexteDefilant.scrollingText("Info", f,couleurInfo,prochaineSalat.getCouleurDouaa()); 
+						prochaineSalat.setCompteur(1);
+					}
+				}
+				
+				contentPane.revalidate();
+				f.setExtendedState(JFrame.MAXIMIZED_BOTH);
+				f.setVisible(true);
+			
+				try {
+					if(premierLancement){
+						 
+							Thread.sleep(diffSec*1000);
+							diffSec=0;
+						}else
+					{
+							
+							 if(prochaineSalat.getTempsEnMin()> tempsNow +25 && !notDorhJoumou3a() )//info joumou3a dure plus longtemps si le Adhane n'est pas proche
+								{ 
+									Thread.sleep(dureeInfo*1000*3);
+								}
+							 else
+							{
+								Thread.sleep(dureeInfo*1000);
+							} 
+						
+						infoApresInfo=0;
+					}
+					contentPane.removeAll();
+					contentPane = f.getContentPane();
+					contentPane.setLayout(new BorderLayout());
+					miseEnFormePanelPrieres();
+					contentPane.add(Entete, BorderLayout.PAGE_START);
+					contentPane.add(panelPrieres, BorderLayout.CENTER);
+					contentPane.add(DateHeure, BorderLayout.PAGE_END);
+					contentPane.repaint();
+					contentPane.revalidate();
+					f.setExtendedState(JFrame.MAXIMIZED_BOTH);
+					f.setVisible(true);
+					 
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				 
+				}
+			}
+		}
+			try {
+				if(premierLancement){
+					 
+					Thread.sleep(diffSec*1000);
+					premierLancement=false;
+					 
+				}else 
+				{ 
+				calendar.setTime(new Date());
+				Thread.sleep((60-calendar.get(Calendar.SECOND))*1000*infoApresInfo);
+				 
+				}
+			} catch (InterruptedException e) {
+			}
+		}
+
+	}
+
+	void miseEnFormePanelPrieres() {
+		panelPrieres = new JPanel();
+	    panelPrieres.setLayout(new GridLayout());
+		panelPrieres.setPreferredSize(new Dimension(10000,  (int) Math.round(hEcran * 0.30)));
+		panelPrieres.setMaximumSize(new Dimension(10000,  (int) Math.round(hEcran * 0.30)));
+	    
+		panelPrieres1 = new PrierePanel().mettreEnForme(icha.getMb(),icha.getPriereCouleur(), icha.getColeur(), icha.getNom(),icha.getHeure_p() + ":" + completerZero(icha.getMin_p()),icha.getFond(),null);
+		panelPrieres2 = new PrierePanel().mettreEnForme(maghreb.getMb(),maghreb.getPriereCouleur(), maghreb.getColeur(), maghreb.getNom(),	maghreb.getHeure_p() + ":" + completerZero(maghreb.getMin_p()),	maghreb.getFond(),null);
+		panelPrieres3 = new PrierePanel().mettreEnForme(asr.getMb(),asr.getPriereCouleur(), asr.getColeur(),asr.getNom() ,asr.getHeure_p() + ":" + completerZero(asr.getMin_p()),asr.getFond(),null);
+		panelPrieres4 = new PrierePanel().mettreEnForme(dohr.getMb(),dohr.getPriereCouleur(), dohr.getColeur(), dohr.getNom(),dohr.getHeure_p() + ":" + completerZero(dohr.getMin_p()),dohr.getFond(),null);
+		panelPrieres5 = new PrierePanel().mettreEnForme(sobh.getMb(),sobh.getPriereCouleur(), sobh.getColeur(), sobh.getNom(),"0" + sobh.getHeure_p() + ":" + completerZero(sobh.getMin_p()),sobh.getFond(),"0" + chourouk.getHeure_p() + ":" + completerZero(chourouk.getMin_p()));
+		
+	 
+		if(salatNow!=null){	
+			panelIkama = new IkamaPanelPetite().mettreEnForme(image_ikama,salatNow.getAttente_p() - 2,hEcran,salatNow.getNom() ); 
+			if(salatNow==sobh){
+			 	panelPrieres5=panelIkama;
+			}
+			else if(salatNow==dohr){
+			 	panelPrieres4=panelIkama;
+			}
+			else if(salatNow==asr){
+			 	panelPrieres3=panelIkama;
+			}
+			else if(salatNow==maghreb){
+			 	panelPrieres2=panelIkama;
+			}else if(salatNow==icha){
+			 	panelPrieres1=panelIkama;
+			}
+		}
+		panelPrieres.add(panelPrieres1);
+		panelPrieres.add(panelPrieres2);
+		panelPrieres.add(panelPrieres3);
+		panelPrieres.add(panelPrieres4);
+		panelPrieres.add(panelPrieres5);
+		
+	}
+
+	void extraireInfosJour() throws IOException {
+		now = new Date();
+		calendar.setTime(now);
+		tempsNow = calendar.get(Calendar.HOUR_OF_DAY) * 60	+ calendar.get(Calendar.MINUTE);
+ 
+		fichierDuJour = new CsvFile(CsvFileHelper.getResource(calendar.get(Calendar.MONTH) + 1 + ".csv"));
+		jour = Jour.mapToJour(fichierDuJour.getSearchLine(calendar.get(Calendar.DAY_OF_MONTH) - 1), image_off, fond_off, white,	priereCouleur_off);
+
+		sobh = jour.getHoraires().get(0);
+		dohr = jour.getHoraires().get(1);
+		//System.out.println(calendar.get(Calendar.DAY_OF_WEEK));
+		if(calendar.get(Calendar.DAY_OF_WEEK)==6){
+			dohr.setHeure_p(joumouaH);
+			dohr.setMin_p(joumouaM);
+			dohr.setNom("الجمعة");
+			dohr.setFileDouaa("Fadl_j");
+			dohr.setTempsEnMin(dohr.getHeure_p()*60+dohr.getMin_p());
+		}
+		asr = jour.getHoraires().get(2);
+		maghreb = jour.getHoraires().get(3);
+		icha = jour.getHoraires().get(4);
+		chourouk = jour.getHoraires().get(5);
+
+		if (sobh.getHeure_p() * 60 + sobh.getMin_p()+sobh.getAttente_p() > tempsNow) {
+			sobh.setColeur(image_on);
+			sobh.setFond(fond_on);
+			sobh.setMb(yellow);
+			sobh.setPriereCouleur(priereCouleur_on);
+			prochaineSalat=sobh;
+
+		} else if (dohr.getTempsEnMin()+dohr.getAttente_p() > tempsNow) {
+			dohr.setColeur(image_on);
+			dohr.setFond(fond_on);
+			dohr.setMb(yellow);
+			dohr.setPriereCouleur(priereCouleur_on);
+			sobh.setMb(whiteleft);
+			prochaineSalat=dohr;
+
+		} else if (asr.getTempsEnMin()+asr.getAttente_p() > tempsNow) {
+			asr.setColeur(image_on);
+			asr.setFond(fond_on);
+			asr.setMb(yellow);
+			asr.setPriereCouleur(priereCouleur_on);
+			dohr.setMb(whiteleft);
+			prochaineSalat=asr;
+
+		} else if (maghreb.getTempsEnMin()+maghreb.getAttente_p() > tempsNow) {
+			maghreb.setColeur(image_on);
+			maghreb.setFond(fond_on);
+			maghreb.setMb(yellow);
+			maghreb.setPriereCouleur(priereCouleur_on);
+			asr.setMb(whiteleft);
+			prochaineSalat=maghreb;
+
+		} else {
+			icha.setColeur(image_on);
+			icha.setFond(fond_on);
+			icha.setMb(yellow);
+			icha.setPriereCouleur(priereCouleur_on);
+			maghreb.setMb(whiteleft);
+			prochaineSalat=icha;
+		}
+
+	}
+	
+	boolean notDorhJoumou3a(){
+		return  (prochaineSalat!=dohr && calendar.get(Calendar.DAY_OF_WEEK)==6) ||  calendar.get(Calendar.DAY_OF_WEEK)!=6 ;
+	}
+
+	String completerZero(int val) {
+		if (val < 10)
+			return "0" + val;
+		else
+			return String.valueOf(val);
+	}
+
+}

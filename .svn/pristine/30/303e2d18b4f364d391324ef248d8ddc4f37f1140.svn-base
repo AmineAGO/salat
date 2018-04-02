@@ -1,0 +1,449 @@
+package dz.aggoun.prayer.houres;
+
+import java.awt.AWTException;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.GridLayout;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.util.Properties;
+
+import javax.swing.JButton;
+import javax.swing.JColorChooser;
+import javax.swing.JComboBox;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JTextField;
+
+import dz.aggoun.prayer.houres.data.FichierPropreties;
+import dz.aggoun.prayer.houres.tools.EcritureFichier;
+
+public class Admin extends JFrame  {
+	
+	
+	private JPanel container = new JPanel();
+	  private JComboBox comboTypeInfo = new JComboBox();
+	  private JComboBox  comboDureeInfo ;
+	  private JLabel labelTypeInfo = new JLabel("تمرير الأحاديث و النصوص");
+	  private JLabel labelDureeInfo = new JLabel("مُدَّة تمرير الأحاديث و النصوص");
+	  private JTextField tfNomMosquee = new JTextField("أدخل إسم المسجد");
+	  private JLabel labelNomMosquee = new JLabel("إسم المسجد");
+	  private JTextField tfNomVille = new JTextField("أدخل إسم المدينة");
+	  private JLabel labelNomVille = new JLabel("إسم المدينة");
+	  private JTextField tfJoumouaa = new JTextField(" وقت صلاة الجمعة "); ;
+	  private JLabel labelJoumouaa = new JLabel(" وقت صلاة الجمعة ");
+	  private JLabel labelHijir = new JLabel(" تعديل التاريخ الهجري ");
+	  private JComboBox  comboJoumouaaH ;
+	  private JComboBox  comboJoumouaaM ;
+	  private JComboBox  comboHijir ;
+	  private JButton b1 = new JButton ("ثبِّت الإختيارات");
+	  private JButton b2 = new JButton ("إلغاء التعديلات");
+	  private JButton b3 = new JButton ("الإعدادات الأصلية ");
+	  private JButton b4 = new JButton (" تحقق؟ ");
+	  private JButton boutonCouleurTextEntete = new JButton ("إختر اللّون...");
+	  private JLabel labelCouleurTextEntete = new JLabel(     " لون خط إسم المسجد");
+	  private JButton boutonCouleurTextPriere = new JButton ("إختر اللّون...");
+	  private JLabel labelCouleurTextPriere = new JLabel(     " لون خط إسم الصلاة");
+	  private JButton boutonCouleurTextPriereOn = new JButton ("إختر اللّون...");
+	  private JLabel labelCouleurTextPriereOn = new JLabel(     "  لون خط إسم الصلاة المقبلة");
+	  private JButton boutonCouleurTextHeure = new JButton ("إختر اللّون...");
+	  private JLabel labelCouleurTextHeure= new JLabel(     "لون الساعة");
+	  
+	  private JButton boutonPriereFondCouleur_off = new JButton ("إختر اللّون...");
+	  private JLabel labelPriereFondCouleur_offe= new JLabel(     "لون خلفية أسماء الصلوات");
+	  private JButton boutonPriereFondCouleur_on = new JButton ("إختر اللّون...");
+	  private JLabel labelPriereFondCouleur_on= new JLabel(     " لون خلفية إسم الصلاة المقبلة");
+	  private JButton boutonCouleurHeureFond = new JButton ("إختر اللّون...");
+	  private JLabel labelCouleurHeureFond= new JLabel(     "لون خلفية الساعة ");
+	  private JButton boutonCouleurFondDouaaAz = new JButton ("إختر اللّون...");
+	  private JLabel labelCouleurFondDouaaAz= new JLabel(     "لون خلفية الدعاء بعد الأذان ");
+	  private JButton boutonCouleurDouaaAz = new JButton ("إختر اللّون...");
+	  private JLabel labelCouleurDouaaAz= new JLabel(     "لون خط الدعاء بعد الأذان ");
+	  private JButton boutonCouleurFondInfo = new JButton ("إختر اللّون...");
+	  private JLabel labelCouleurFondInfo= new JLabel(     "لون خلفية النص الموَّحد ");
+	  private JButton boutonCouleurInfo = new JButton ("إختر اللّون...");
+	  private JLabel labelCouleurInfo= new JLabel(     "لون خط النص الموَّحد ");
+	  private Color couleurEnteteText;
+	  private Color couleurEntetePriere;
+	  private Color couleurEntetePriereOn;
+	  private Color couleurHeure;
+	  private Color priereFondCouleur_off;
+	  private Color priereFondCouleur_on;
+	  private Color heureFond;
+	  private Color fondDouaa;
+	  private Color couleurDouaa;
+	  private Color fondInfo;
+	  private Color couleurInfo;
+	  Properties prop = new Properties();
+	  InputStream input = null;
+
+	public Admin() throws IOException, AWTException {
+		
+		input = new FileInputStream("config.properties");
+
+		// load a properties file
+		prop.load(new InputStreamReader(new FileInputStream("config.properties"), "UTF-8"));
+		 
+   	    
+		  tfJoumouaa.setText( prop.getProperty("joumoua")); 
+	
+		  couleurEnteteText=new Color( Integer.valueOf( prop.getProperty("couleur_nom_mosquee").substring( 1, 3 ), 16 ),   Integer.valueOf( prop.getProperty("couleur_nom_mosquee").substring( 3, 5 ), 16 ), Integer.valueOf( prop.getProperty("couleur_nom_mosquee").substring( 5, 7 ), 16 ) );
+		  couleurEntetePriere=new Color( Integer.valueOf( prop.getProperty("coleur_nom_priere_off").substring( 1, 3 ), 16 ),   Integer.valueOf( prop.getProperty("coleur_nom_priere_off").substring( 3, 5 ), 16 ), Integer.valueOf( prop.getProperty("coleur_nom_priere_off").substring( 5, 7 ), 16 ) );
+		  couleurEntetePriereOn=new Color( Integer.valueOf( prop.getProperty("coleur_nom_priere_on").substring( 1, 3 ), 16 ),   Integer.valueOf( prop.getProperty("coleur_nom_priere_on").substring( 3, 5 ), 16 ), Integer.valueOf( prop.getProperty("coleur_nom_priere_on").substring( 5, 7 ), 16 ) );
+		  couleurHeure=new Color( Integer.valueOf( prop.getProperty("couleurPoliceHeure").substring( 1, 3 ), 16 ),   Integer.valueOf( prop.getProperty("couleurPoliceHeure").substring( 3, 5 ), 16 ), Integer.valueOf( prop.getProperty("couleurPoliceHeure").substring( 5, 7 ), 16 ) );
+		  priereFondCouleur_off=new Color(Integer.valueOf(prop.getProperty("fond_prierre_off_r").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_prierre_off_g").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_prierre_off_b").replace(" ", "")));
+		  priereFondCouleur_on=new Color(Integer.valueOf(prop.getProperty("fond_prierre_on_r").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_prierre_on_g").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_prierre_on_b").replace(" ", "")));
+		  heureFond=new Color(Integer.valueOf(prop.getProperty("fond_heure_on_r").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_heure_on_g").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_heure_on_b").replace(" ", "")));
+		  fondDouaa=new Color(Integer.valueOf(prop.getProperty("fond_douaa_r").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_douaa_g").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_douaa_b").replace(" ", "")));
+		  couleurDouaa=new Color(Integer.valueOf(prop.getProperty("couleur_douaa_r").replace(" ", "")),Integer.valueOf(prop.getProperty("couleur_douaa_g").replace(" ", "")),Integer.valueOf(prop.getProperty("couleur_douaa_b").replace(" ", "")));
+		  fondInfo=new Color(Integer.valueOf(prop.getProperty("fond_info_r").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_info_g").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_info_b").replace(" ", "")));
+		  couleurInfo=new Color(Integer.valueOf(prop.getProperty("couleur_info_r").replace(" ", "")),Integer.valueOf(prop.getProperty("couleur_info_g").replace(" ", "")),Integer.valueOf(prop.getProperty("couleur_info_b").replace(" ", "")));
+ 
+		class BoutonListenerValide implements ActionListener{
+
+		    public void actionPerformed(ActionEvent e) {
+		    	
+		    	EcritureFichier.ecrire(remplirFichierTmp(), "config.properties");
+		    	
+		    }
+
+		  }
+		class BoutonListenerAnnule implements ActionListener{
+
+		    public void actionPerformed(ActionEvent e) {
+
+		     
+
+		    }
+
+		  }
+		class BoutonListenerDefaut implements ActionListener{
+
+		    public void actionPerformed(ActionEvent e) {
+
+		    	EcritureFichier.ecrire(FichierPropreties.contenu, "config.properties");
+
+		    }
+
+		  }
+		
+		class BoutonListenerApercu implements ActionListener{
+
+		    public void actionPerformed(ActionEvent e) {
+
+		    	EcritureFichier.ecrire(remplirFichierTmp(), "config_tpm.properties");
+		    	
+
+		    }
+
+		  }
+
+		
+		 
+		  
+
+		 
+		    this.setTitle("تعديلات تطبيق وقوت الصلاة");
+		    this.setSize(700, 1000);
+		    this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		    this.setLocationRelativeTo(null);
+		 
+		    container.setBackground(Color.white);
+		    container.setLayout(new GridLayout(0,1,15,15 ));
+		    
+		    tfNomMosquee.setText(prop.getProperty("nommosquee"));
+		    tfNomMosquee.setPreferredSize(new Dimension(300, 30));
+		    
+			tfNomVille.setText(prop.getProperty("villemosquee"));
+			tfNomVille.setPreferredSize(new Dimension(300, 30));
+			
+			tfJoumouaa.setPreferredSize(new Dimension(300, 30));
+		    
+			 comboTypeInfo.setPreferredSize(new Dimension(200, 20));
+		     comboTypeInfo.addItem("إيقاف");
+		     comboTypeInfo.addItem("نص موَّحد");
+		     comboTypeInfo.addItem("نص موَّحد + فضل كل صلاة");
+			
+			b1.addActionListener(new BoutonListenerValide());
+			b2.addActionListener(new BoutonListenerAnnule());
+			b3.addActionListener(new BoutonListenerDefaut());
+			b4.addActionListener(new BoutonListenerApercu());
+		    
+		    
+		    labelCouleurTextEntete.setForeground(couleurEnteteText);
+		    labelCouleurTextPriere.setForeground(couleurEntetePriere);
+		    labelCouleurTextPriereOn.setForeground(couleurEntetePriereOn);
+		    labelCouleurTextHeure.setForeground(couleurHeure);
+		    labelPriereFondCouleur_offe.setForeground(priereFondCouleur_off);
+		    labelPriereFondCouleur_on.setForeground(priereFondCouleur_on);
+			labelCouleurHeureFond.setForeground(heureFond);
+			labelCouleurFondDouaaAz.setForeground(fondDouaa);
+			labelCouleurDouaaAz.setForeground(couleurDouaa);
+			labelCouleurFondInfo.setForeground(fondInfo);
+			labelCouleurInfo.setForeground(couleurInfo);
+			 
+		     
+		    
+		    
+		   // comboTypeInfo.addActionListener(new ItemActionType());
+		     
+		    
+		    String[] tab1 = {"كل 5 دقائق"  ,"كل 10 دقائق","كل 15 دقائق","كل 20 دقائق","كل 25 دقائق","كل 30 دقائق","كل 40 دقائق"};
+		    comboDureeInfo=new JComboBox(tab1);
+		    comboDureeInfo.setPreferredSize(new Dimension(200, 20));
+		    
+		    String[] tab2 = {"12","13","14"};
+		    comboJoumouaaH=new JComboBox(tab2);
+		    comboJoumouaaH.setPreferredSize(new Dimension(100, 20));
+		    int i;
+		    for(  i=0;i<tab2.length;i++){
+		    	if(tab2[i].equalsIgnoreCase(prop.getProperty("joumouaH").replace(" ", ""))){
+		    		break;
+		    	}
+		    }
+		    comboJoumouaaH.setSelectedIndex(i);
+		    
+		    String[] tab3 = {"00","01","02","03","04","05","06","07","08","09","10","11","12","13","14","15","16","17","18","19","20","22","22","23","24","25","26","27","28","29","30","31","32","33","34","35","36","37","38","39","40","41","42","44","44","45","46","47","48","49","50","51","52","53","54","55","56","57","58","59"};
+		    comboJoumouaaM=new JComboBox(tab3);
+		    for(  i=0;i<tab3.length;i++){
+		    	if(tab3[i].equalsIgnoreCase(prop.getProperty("joumouaM").replace(" ", ""))){
+		    		break;
+		    	}
+		    }
+		    comboJoumouaaM.setSelectedIndex(i);
+		    comboJoumouaaM.setPreferredSize(new Dimension(100, 20));
+		    
+		    String[] tab4 = {"-2","-1","0","1","2"};
+		     comboHijir=new JComboBox(tab4);
+		    for(  i=0;i<tab4.length;i++){
+		    	if(tab4[i].equalsIgnoreCase(prop.getProperty("deltaHijir").replace(" ", ""))){
+		    		break;
+		    	}
+		    }
+		   
+		    comboHijir.setSelectedIndex(i);
+		    comboHijir.setPreferredSize(new Dimension(200, 20));
+		    
+		    
+		    labelTypeInfo.setFont(new Font("TimesRoman", Font.BOLD, 16));
+		    labelDureeInfo.setFont(new Font("TimesRoman", Font.BOLD, 16));
+		    labelNomMosquee.setFont(new Font("TimesRoman", Font.BOLD, 16));
+		    labelNomVille.setFont(new Font("TimesRoman", Font.BOLD, 16));
+		    labelJoumouaa.setFont(new Font("TimesRoman", Font.BOLD, 16));
+		    labelHijir.setFont(new Font("TimesRoman", Font.BOLD, 16));
+		    labelCouleurTextEntete.setFont(new Font("TimesRoman", Font.BOLD, 16));
+		    labelCouleurTextPriere.setFont(new Font("TimesRoman", Font.BOLD, 16));
+		    labelHijir.setFont(new Font("TimesRoman", Font.BOLD, 16));
+		    labelHijir.setFont(new Font("TimesRoman", Font.BOLD, 16));
+		    labelHijir.setFont(new Font("TimesRoman", Font.BOLD, 16));
+		    labelCouleurTextPriereOn.setFont(new Font("TimesRoman", Font.BOLD, 16));
+		    labelCouleurTextHeure.setFont(new Font("TimesRoman", Font.BOLD, 16));
+		    labelPriereFondCouleur_offe.setFont(new Font("TimesRoman", Font.BOLD, 16));
+		    labelPriereFondCouleur_on.setFont(new Font("TimesRoman", Font.BOLD, 16));
+			labelCouleurHeureFond.setFont(new Font("TimesRoman", Font.BOLD, 16));
+			labelCouleurFondDouaaAz.setFont(new Font("TimesRoman", Font.BOLD, 16));
+			labelCouleurDouaaAz.setFont(new Font("TimesRoman", Font.BOLD, 16));
+			labelCouleurFondInfo.setFont(new Font("TimesRoman", Font.BOLD, 16));
+			labelCouleurInfo.setFont(new Font("TimesRoman", Font.BOLD, 16));
+		    
+		 
+		     
+		    JPanel mosquePan = new JPanel();
+		    JPanel villePan = new JPanel();
+		    JPanel dureePan = new JPanel();
+		    JPanel typePan = new JPanel();
+		    JPanel joumouaaPan = new JPanel();
+		    JPanel hijirPan = new JPanel();
+		    JPanel couTextEntetPan = new JPanel();
+		    JPanel couTextPrierePan = new JPanel();
+		    JPanel couTextPriereOnPan = new JPanel();
+		    JPanel couTextHeurePan = new JPanel();
+		    JPanel priereFondCouleur_offePan = new JPanel();
+		    JPanel priereFondCouleur_onPan = new JPanel();
+		    JPanel couleurHeureFondPan = new JPanel();
+		    JPanel couleurFondDouaaAzPan = new JPanel();
+		    JPanel couleurDouaaAzPan = new JPanel();
+		    JPanel couleurFondInfoPan = new JPanel();
+		    JPanel couleurInfoPan = new JPanel();
+		    
+		    JPanel bas = new JPanel();
+		   
+		    
+		    
+		    mosquePan.setPreferredSize(new Dimension(30, 30));
+		    
+		    mosquePan.setBackground(new Color(198,199,199));
+		    villePan.setBackground(Color.WHITE);
+		    dureePan.setBackground(new Color(198,199,199));
+		    typePan.setBackground(Color.WHITE);
+		    joumouaaPan.setBackground(new Color(198,199,199));
+		    hijirPan.setBackground(Color.WHITE);
+		    couTextHeurePan.setBackground(new Color(198,199,199));
+		    couTextEntetPan.setBackground(Color.WHITE);
+		    couTextPriereOnPan.setBackground(new Color(198,199,199));
+		    couTextPrierePan.setBackground(new Color(198,199,199));
+		    priereFondCouleur_offePan .setBackground(Color.WHITE);  
+		    priereFondCouleur_onPan .setBackground(Color.WHITE );
+		    couleurHeureFondPan .setBackground(Color.WHITE );
+		    couleurFondDouaaAzPan .setBackground( Color.WHITE);
+		    couleurDouaaAzPan .setBackground(new Color(198,199,199) );
+		    couleurFondInfoPan .setBackground(Color.WHITE );
+		    couleurInfoPan .setBackground( new Color(198,199,199));
+		   
+		    
+		    bas.setBackground(new Color(244,131,1));
+		    
+		    
+		     
+		    mosquePan.add(tfNomMosquee);
+		    mosquePan.add(labelNomMosquee);
+		    container.add(mosquePan );
+		     
+		    villePan.add(tfNomVille);
+		    villePan.add(labelNomVille);
+		    container.add(villePan );
+		    
+		    dureePan.add(comboTypeInfo);
+		    dureePan.add(labelTypeInfo);
+		    container.add(dureePan );
+		    
+		    typePan.add(comboDureeInfo);
+		    typePan.add(labelDureeInfo);
+		    container.add(typePan );
+		    
+		    joumouaaPan.add(comboJoumouaaH);
+		    joumouaaPan.add(comboJoumouaaM);
+		    joumouaaPan.add(labelJoumouaa);
+		    container.add(joumouaaPan );
+		    
+		    hijirPan.add(comboHijir);
+		    hijirPan.add(labelHijir);
+		    container.add(hijirPan );
+		    
+		    couTextHeurePan.add(boutonCouleurTextHeure);
+		    couTextHeurePan.add(labelCouleurTextHeure);
+		    container.add(couTextHeurePan );
+		    
+		    couleurHeureFondPan .add( boutonCouleurHeureFond);
+		     couleurHeureFondPan .add( labelCouleurHeureFond);
+		     container.add(couleurHeureFondPan );
+		 
+		    
+		    couTextPriereOnPan.add(boutonCouleurTextPriereOn);
+		    couTextPriereOnPan.add(labelCouleurTextPriereOn);
+		    container.add(couTextPriereOnPan );
+
+		     priereFondCouleur_onPan .add(boutonPriereFondCouleur_on);
+		     priereFondCouleur_onPan .add(labelPriereFondCouleur_on);
+		     container.add(priereFondCouleur_onPan );
+		    
+		     couTextPrierePan.add(boutonCouleurTextPriere);
+			    couTextPrierePan.add(labelCouleurTextPriere);
+			    container.add(couTextPrierePan );
+			    
+		    priereFondCouleur_offePan .add(boutonPriereFondCouleur_off );
+		    priereFondCouleur_offePan .add( labelPriereFondCouleur_offe); 
+		    container.add(priereFondCouleur_offePan );
+		    
+		     
+		     
+		    couleurDouaaAzPan .add( boutonCouleurDouaaAz);
+		     couleurDouaaAzPan .add(labelCouleurDouaaAz );
+		     container.add(couleurDouaaAzPan );
+		      
+		     
+		     couleurFondDouaaAzPan .add( boutonCouleurFondDouaaAz );
+		     couleurFondDouaaAzPan .add( labelCouleurFondDouaaAz );
+		     container.add(couleurFondDouaaAzPan );
+		     
+		     couleurInfoPan .add( boutonCouleurInfo);
+		     couleurInfoPan .add( labelCouleurInfo);
+		     container.add(couleurInfoPan );
+		     
+		     couleurFondInfoPan .add(boutonCouleurFondInfo);
+		     couleurFondInfoPan .add(labelCouleurFondInfo);
+		     container.add(couleurFondInfoPan );
+		     
+		      
+		    
+		     
+			    couTextEntetPan.add(boutonCouleurTextEntete);
+			    couTextEntetPan.add(labelCouleurTextEntete);
+			    container.add(couTextEntetPan );
+			   
+			 bas.add(b4 );
+		     bas.add(b3 );  
+		     bas.add(b2 );
+		     bas.add(b1 );
+		    
+		  
+		    container.add(bas );
+		    
+		    this.setContentPane(container);
+		    this.setVisible(true);            
+		 
+		
+	
+		
+		 
+			 
+		 
+	}
+
+
+
+
+	public static void main(String[] args) throws IOException, AWTException {
+		 
+		new Admin();
+	}
+
+	String remplirFichierTmp( ) {
+		String s=FichierPropreties.contenu_tmp;
+    	
+    	s=s.replace("$nommosquee", tfNomMosquee.getText());
+    	s=s.replace("$villemosquee", tfNomVille.getText());
+    	s=s.replace("$perdiodeInfo", comboDureeInfo.getSelectedItem().toString().substring(3, 5));
+    	s=s.replace("$typeInfo",  String.valueOf(comboTypeInfo.getSelectedIndex()));
+    	s=s.replace("$joumouaH",  comboJoumouaaH.getSelectedItem().toString());
+    	s=s.replace("$joumouaM",  comboJoumouaaM.getSelectedItem().toString());
+    	s=s.replace("$joumoua", "صلاة الجمعة على الساعة " +comboJoumouaaH.getSelectedItem().toString()+":"+comboJoumouaaM.getSelectedItem().toString()  );
+    	s=s.replace("$deltaHijir",  comboHijir.getSelectedItem().toString());
+    	s=s.replace("$couleur_nom_mosquee", String.format("#%02x%02x%02x", couleurEnteteText.getRed(), couleurEnteteText.getGreen(), couleurEnteteText.getBlue()) );  
+    	s=s.replace("$coleur_nom_priere_off", String.format("#%02x%02x%02x", couleurEntetePriere.getRed(), couleurEntetePriere.getGreen(), couleurEntetePriere.getBlue()) );
+    	s=s.replace("$coleur_nom_priere_on", String.format("#%02x%02x%02x", couleurEntetePriereOn.getRed(), couleurEntetePriereOn.getGreen(), couleurEntetePriereOn.getBlue()) );
+    	s=s.replace("$couleurPoliceHeure", String.format("#%02x%02x%02x", couleurHeure.getRed(), couleurHeure.getGreen(), couleurHeure.getBlue()) );
+    	s=s.replace("$fond_prierre_off_r",  String.valueOf(priereFondCouleur_off.getRed()));
+    	s=s.replace("$fond_prierre_off_g",   String.valueOf(priereFondCouleur_off.getGreen()) );
+    	s=s.replace("$fond_prierre_off_b",   String.valueOf(priereFondCouleur_off.getBlue()));
+    	s=s.replace("$fond_prierre_on_r",  String.valueOf(priereFondCouleur_on.getRed()));
+    	s=s.replace("$fond_prierre_on_g",   String.valueOf(priereFondCouleur_on.getGreen()) );
+    	s=s.replace("$fond_prierre_on_b",   String.valueOf(priereFondCouleur_on.getBlue()));
+    	s=s.replace("$fond_heure_on_r",  String.valueOf(heureFond.getRed()));
+    	s=s.replace("$fond_heure_on_g",   String.valueOf(heureFond.getGreen()) );
+    	s=s.replace("$fond_heure_on_b",   String.valueOf(heureFond.getBlue()));
+    	s=s.replace("$fond_douaa_r",  String.valueOf(fondDouaa.getRed()));
+    	s=s.replace("$fond_douaa_g",   String.valueOf(fondDouaa.getGreen()) );
+    	s=s.replace("$fond_douaa_b",   String.valueOf(fondDouaa.getBlue()));
+    	s=s.replace("$couleur_douaa_r",  String.valueOf(couleurDouaa.getRed()));
+    	s=s.replace("$couleur_douaa_g",   String.valueOf(couleurDouaa.getGreen()) );
+    	s=s.replace("$couleur_douaa_b",   String.valueOf(couleurDouaa.getBlue()));
+    	s=s.replace("$fond_info_r",  String.valueOf(fondInfo.getRed()));
+    	s=s.replace("$fond_info_g",   String.valueOf(fondInfo.getGreen()) );
+    	s=s.replace("$fond_info_b",   String.valueOf(fondInfo.getBlue()));
+    	s=s.replace("$couleur_info_r",  String.valueOf(couleurInfo.getRed()));
+    	s=s.replace("$couleur_info_g",   String.valueOf(couleurInfo.getGreen()) );
+    	s=s.replace("$couleur_info_b",   String.valueOf(couleurInfo.getBlue()));
+    	
+    	return s;
+    	
+	}
+
+}

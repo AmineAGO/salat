@@ -1,0 +1,805 @@
+package dz.aggoun.prayer.houres;
+
+import java.awt.AWTException;
+import java.awt.Color;
+import java.awt.Container;
+import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.GridLayout;
+import java.awt.Toolkit;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.BufferedReader;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Properties;
+
+import javax.swing.JButton;
+import javax.swing.JColorChooser;
+import javax.swing.JComboBox;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTextField;
+import javax.swing.UIManager;
+
+import org.jdatepicker.impl.JDatePanelImpl;
+import org.jdatepicker.impl.JDatePickerImpl;
+import org.jdatepicker.impl.UtilDateModel;
+
+import dz.aggoun.prayer.houres.data.DateLabelFormatter;
+import dz.aggoun.prayer.houres.data.FichierPropreties;
+import dz.aggoun.prayer.houres.tools.EcritureFichier;
+
+public class Admin extends JFrame  {
+	
+	
+	  private Container container ;
+      private JComboBox comboDateH ;
+	  private JComboBox comboDateM  ;
+	  private JComboBox comboTypeInfo = new JComboBox();
+	  private JComboBox  comboDureeInfo ;
+	  private JLabel labelTypeInfo = new JLabel("تمرير الأحاديث و النصوص");
+	  private JLabel labelDureeInfo = new JLabel("مُدَّة تمرير الأحاديث و النصوص");
+	  private JTextField tfNomMosquee = new JTextField("أدخل إسم المسجد");
+	  private JLabel labelNomMosquee = new JLabel("إسم المسجد");
+	  private JTextField tfNomVille = new JTextField("أدخل إسم المدينة");
+	  private JLabel labelNomVille = new JLabel("إسم المدينة");
+	  private JTextField tfJoumouaa = new JTextField(" وقت صلاة الجمعة "); ;
+	  private JLabel labelJoumouaa = new JLabel(" وقت صلاة الجمعة ");
+	  private JLabel labelHijir = new JLabel(" تعديل التاريخ الهجري ");
+	  private JComboBox  comboJoumouaaH ;
+	  private JComboBox  comboJoumouaaM ;
+	  private JComboBox  comboHijir ;
+	  private JButton b1 = new JButton ("ثبِّت الإختيارات");
+	  private JButton b2 = new JButton ("إلغاء التعديلات");
+	  private JButton b3 = new JButton ("الإعدادات الأصلية ");
+	  private JButton b4 = new JButton (" تحقق؟ ");
+	  private JButton b5 = new JButton ("عدِّل التاريخ و الساعة ");
+	  private JButton boutonCouleurTextEntete = new JButton ("إختر اللّون...");
+	  private JLabel labelCouleurTextEntete = new JLabel(     " لون خط إسم المسجد");
+	  private JButton boutonCouleurTextPriere = new JButton ("إختر اللّون...");
+	  private JLabel labelCouleurTextPriere = new JLabel(     " لون خط إسم الصلاة");
+	  private JButton boutonCouleurTextPriereOn = new JButton ("إختر اللّون...");
+	  private JLabel labelCouleurTextPriereOn = new JLabel(     "  لون خط إسم الصلاة المقبلة");
+	  private JButton boutonCouleurTextHeure = new JButton ("إختر اللّون...");
+	  private JLabel labelCouleurTextHeure= new JLabel(     "لون الساعة");
+	  private JButton boutonPriereFondCouleur_off = new JButton ("إختر اللّون...");
+	  private JLabel labelPriereFondCouleur_offe= new JLabel(     "لون خلفية أسماء الصلوات");
+	  private JButton boutonPriereFondCouleur_on = new JButton ("إختر اللّون...");
+	  private JLabel labelPriereFondCouleur_on= new JLabel(     " لون خلفية إسم الصلاة المقبلة");
+	  private JButton boutonCouleurHeureFond = new JButton ("إختر اللّون...");
+	  private JLabel labelCouleurHeureFond= new JLabel(     "لون خلفية الساعة ");
+	  private JButton boutonCouleurFondDouaaAz = new JButton ("إختر اللّون...");
+	  private JLabel labelCouleurFondDouaaAz= new JLabel(     "لون خلفية الدعاء بعد الأذان ");
+	  private JButton boutonCouleurDouaaAz = new JButton ("إختر اللّون...");
+	  private JLabel labelCouleurDouaaAz= new JLabel(     "لون خط الدعاء بعد الأذان ");
+	  private JButton boutonCouleurFondInfo = new JButton ("إختر اللّون...");
+	  private JLabel labelCouleurFondInfo= new JLabel(     "لون خلفية النص الموَّحد ");
+	  private JButton boutonCouleurInfo = new JButton ("إختر اللّون...");
+	  private JLabel labelCouleurInfo= new JLabel(     "لون خط النص الموَّحد ");
+	  
+	  private JLabel labelDatePick = new JLabel(" تعديل التاريخ الميلادي ");
+	  private JDatePickerImpl datePicker ;
+	 
+	  private Color couleurEnteteText;
+	  private Color couleurEntetePriere;
+	  private Color couleurEntetePriereOn;
+	  private Color couleurHeure;
+	  private Color priereFondCouleur_off;
+	  private Color priereFondCouleur_on;
+	  private Color heureFond;
+	  private Color fondDouaa;
+	  private Color couleurDouaa;
+	  private Color fondInfo;
+	  private Color couleurInfo;
+	  Properties prop = new Properties();
+	  InputStream input = null;
+
+	public Admin() throws IOException, AWTException {
+		
+	  
+		Toolkit tk = Toolkit.getDefaultToolkit();  
+		int xSize = ((int) tk.getScreenSize().getWidth());  
+		int ySize = ((int) tk.getScreenSize().getHeight()); 
+		
+		  this.setTitle("تعديلات تطبيق وقوت الصلاة");
+		    this.setSize(xSize/2, ySize);
+		    this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		    this.setLocationRelativeTo(null);
+		    container=this.getContentPane();
+		    
+		    b1.addActionListener(new BoutonListenerValide());
+			b2.addActionListener(new BoutonListenerAnnule());
+			b3.addActionListener(new BoutonListenerDefaut());
+			b4.addActionListener(new BoutonListenerApercu());
+			b5.addActionListener(new BoutonListenerValideDate());
+			
+			Font fcombo= new Font("Tahoma", Font.PLAIN, 13);
+		    UIManager.put("ComboBox.font", fcombo);
+		     
+		    
+		    init();   
+		 
+		
+	
+		    boutonPriereFondCouleur_off.addActionListener(new ActionListener( ) {
+				  
+	            public void actionPerformed(ActionEvent actionEvent)
+	 
+	            {	 
+	                Color colorChoose = JColorChooser.showDialog(Admin.this, "إختيار الألوان",priereFondCouleur_off);       
+	 
+	                if (colorChoose != null)
+	                { 
+	                labelPriereFondCouleur_offe.setForeground(colorChoose);
+	                priereFondCouleur_off=colorChoose;}
+	            }
+	         });
+			boutonPriereFondCouleur_on.addActionListener(new ActionListener( ) {
+				  
+	            public void actionPerformed(ActionEvent actionEvent)
+	 
+	            {	 
+	                Color colorChoose = JColorChooser.showDialog(Admin.this, "إختيار الألوان",priereFondCouleur_on);       
+	 
+	                if (colorChoose != null)
+	                { 
+	                labelPriereFondCouleur_on.setForeground(colorChoose);
+	                priereFondCouleur_on=colorChoose;}
+	            }
+	         });
+			boutonCouleurHeureFond.addActionListener(new ActionListener( ) {
+				  
+	            public void actionPerformed(ActionEvent actionEvent)
+	 
+	            {	 
+	                Color colorChoose = JColorChooser.showDialog(Admin.this, "إختيار الألوان",heureFond);       
+	 
+	                if (colorChoose != null)
+	                { 
+	                labelCouleurHeureFond.setForeground(colorChoose);
+	                heureFond=colorChoose;}
+	            }
+	         });
+			boutonCouleurFondDouaaAz.addActionListener(new ActionListener( ) {
+				  
+	            public void actionPerformed(ActionEvent actionEvent)
+	 
+	            {	 
+	                Color colorChoose = JColorChooser.showDialog(Admin.this, "إختيار الألوان",fondDouaa);       
+	 
+	                if (colorChoose != null)
+	                { 
+	                labelCouleurFondDouaaAz.setForeground(colorChoose);
+	                fondDouaa=colorChoose;}
+	            }
+	         });
+			boutonCouleurDouaaAz.addActionListener(new ActionListener( ) {
+				  
+	            public void actionPerformed(ActionEvent actionEvent)
+	 
+	            {	 
+	                Color colorChoose = JColorChooser.showDialog(Admin.this, "إختيار الألوان",couleurDouaa);       
+	 
+	                if (colorChoose != null)
+	                {
+	                labelCouleurDouaaAz.setForeground(colorChoose);
+	                couleurDouaa=colorChoose;}
+	            }
+	         });
+			boutonCouleurFondInfo.addActionListener(new ActionListener( ) {
+				  
+	            public void actionPerformed(ActionEvent actionEvent)
+	 
+	            {	 
+	                Color colorChoose = JColorChooser.showDialog(Admin.this, "إختيار الألوان",fondInfo);       
+	 
+	                if (colorChoose != null)
+	                { 
+	                labelCouleurFondInfo.setForeground(colorChoose);
+	                fondInfo=colorChoose;}
+	            }
+	         });
+			boutonCouleurInfo.addActionListener(new ActionListener( ) {
+				  
+	            public void actionPerformed(ActionEvent actionEvent)
+	 
+	            {	 
+	                Color colorChoose = JColorChooser.showDialog(Admin.this, "إختيار الألوان",couleurInfo);       
+	 
+	                if (colorChoose != null)
+	                { 
+	                labelCouleurInfo.setForeground(colorChoose);
+	                couleurInfo=colorChoose;}
+	            }
+	         });
+			
+			boutonCouleurTextEntete.addActionListener(new ActionListener( ) {
+				  
+		            public void actionPerformed(ActionEvent actionEvent)
+		 
+		            {	 
+		                Color colorChoose = JColorChooser.showDialog(Admin.this, "إختيار الألوان",couleurEnteteText);       
+		 
+		                if (colorChoose != null)
+		                {
+		               // System.out.println( String.format("#%02x%02x%02x", colorChoose.getRed(), colorChoose.getGreen(), colorChoose.getBlue()) );
+		                labelCouleurTextEntete.setForeground(colorChoose);
+		                couleurEnteteText=colorChoose;
+		                
+		                }
+		            }
+		         });
+			boutonCouleurTextPriere.addActionListener(new ActionListener( ) {
+				  
+	            public void actionPerformed(ActionEvent actionEvent)
+	 
+	            {	 
+	                Color colorChoose = JColorChooser.showDialog(Admin.this, "إختيار الألوان",couleurEntetePriere);       
+	 
+	                if (colorChoose != null)
+	                { 
+	                labelCouleurTextPriere.setForeground(colorChoose);
+	                couleurEntetePriere=colorChoose;
+	                }
+	            }
+	         });
+			
+			boutonCouleurTextPriereOn.addActionListener(new ActionListener( ) {
+				  
+	            public void actionPerformed(ActionEvent actionEvent)
+	 
+	            {	 
+	                Color colorChoose = JColorChooser.showDialog(Admin.this, "إختيار الألوان",couleurEntetePriereOn);       
+	 
+	                if (colorChoose != null)
+	                { 
+	                labelCouleurTextPriereOn.setForeground(colorChoose);
+	                couleurEntetePriereOn=colorChoose;}
+	            }
+	         });
+			
+			boutonCouleurTextHeure.addActionListener(new ActionListener( ) {
+				  
+	            public void actionPerformed(ActionEvent actionEvent)
+	 
+	            {	 
+	                Color colorChoose = JColorChooser.showDialog(Admin.this, "إختيار الألوان",couleurHeure);       
+	 
+	                if (colorChoose != null)
+	                { 
+	                labelCouleurTextHeure.setForeground(colorChoose);
+	                couleurHeure=colorChoose;}
+	            }
+	         });
+		
+			 
+		 
+			 
+		 
+	}
+	int dialogButton = JOptionPane.YES_NO_OPTION;
+	Font flabel = new Font("Tahoma", Font.PLAIN, 18);
+	 class BoutonListenerDefaut implements ActionListener{
+
+	    public void actionPerformed(ActionEvent e) { 
+	    	 
+	   	 UIManager.put("Label.font", flabel);
+	   	 
+	    	  
+	    	if(JOptionPane.showConfirmDialog (container, "هل أنت متأكد من تثبيت الإعدادات الأصلية؟","!حذار",dialogButton) == JOptionPane.YES_OPTION){
+	           EcritureFichier.ecrire(FichierPropreties.contenu, "config.properties");
+	    	 
+	    	container.removeAll();
+			container.repaint();
+			container.revalidate();
+			 
+	    	try {
+				init();
+			} catch (IOException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}}
+	     }
+          }
+	
+	 class BoutonListenerValideDate implements ActionListener{
+
+		    public void actionPerformed(ActionEvent e) {
+		    	UIManager.put("Label.font", flabel);
+		    	if(JOptionPane.showConfirmDialog (container, "هل أنت متأكد ؟","!حذار",dialogButton) == JOptionPane.YES_OPTION){
+		    	 
+                    
+                     String command1 = "date -s \""+datePicker.getJFormattedTextField().getText()+" "+ comboDateH.getSelectedItem()+":"+comboDateM.getSelectedItem()+":00\"";
+                     String command2 = "hwclock -w ";
+    		         
+                     String[] cmd1 = {"/bin/bash","-c","echo password| sudo -S "+command1};
+                     String[] cmd2 = {"/bin/bash","-c","echo password| sudo -S "+command2};
+                     Process pb;
+					try {
+						pb = Runtime.getRuntime().exec(cmd1);
+						 String line;
+	                     BufferedReader input = new BufferedReader(new InputStreamReader(pb.getInputStream()));
+	                     while ((line = input.readLine()) != null) {
+	                         System.out.println(line);
+	                     }
+	                     input.close();
+	                     
+	                     pb = Runtime.getRuntime().exec(cmd2);
+						  line="";
+	                      input = new BufferedReader(new InputStreamReader(pb.getInputStream()));
+	                     while ((line = input.readLine()) != null) {
+	                         System.out.println(line);
+	                     }
+	                     input.close();
+
+					} catch (IOException e2) {
+						// TODO Auto-generated catch block
+						e2.printStackTrace();
+					}
+
+                     
+		    	 
+				container.removeAll();
+				container.repaint();
+				container.revalidate();
+		    	try {
+					init();
+				} catch (IOException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				}}
+		     }
+
+		  }
+	 class BoutonListenerValide implements ActionListener{
+
+		    public void actionPerformed(ActionEvent e) {
+		    	UIManager.put("Label.font", flabel);
+		    	if(JOptionPane.showConfirmDialog (container, "هل أنت متأكد من تثبيت الإعدادات ؟","!حذار",dialogButton) == JOptionPane.YES_OPTION){
+		    	 
+		    		EcritureFichier.ecrire(remplirFichierTmp(), "config.properties");
+		    	 
+				container.removeAll();
+				container.repaint();
+				container.revalidate();
+		    	try {
+					init();
+				} catch (IOException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				}}
+		     }
+
+		  }
+	 
+		class BoutonListenerAnnule implements ActionListener{
+
+		    public void actionPerformed(ActionEvent e) {
+		    	UIManager.put("Label.font", flabel);
+		    	if(JOptionPane.showConfirmDialog (container, "هل أنت متأكد من إلغاء التعديلات ؟","!حذار",dialogButton) == JOptionPane.YES_OPTION){
+		    	container.removeAll();
+				container.repaint();
+				container.revalidate();
+		    	try {
+					init();
+				} catch (IOException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				}
+}}
+}
+		 
+		
+		class BoutonListenerApercu implements ActionListener{
+
+		    public void actionPerformed(ActionEvent e) {
+		    	 
+		    	EcritureFichier.ecrire(remplirFichierTmp(), "config_tmp.properties");
+		    
+		    	String command = "java -jar WOKOT.jar 1";
+		         
+				try {
+					  Runtime.getRuntime().exec(command);
+				} catch (IOException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				}
+
+		               
+		        
+				}
+		    
+
+		  } 
+	void init() throws UnsupportedEncodingException, IOException	{
+		      
+		Font fbouton = new Font("Tahoma", Font.PLAIN, 15);
+		   
+		    container.setBackground(Color.white);
+		    container.setLayout(new GridLayout(0,1,15,15 )); 
+		   
+		    input = new FileInputStream("config.properties");
+
+			// load a properties file
+			prop.load(new InputStreamReader(new FileInputStream("config.properties"), "UTF-8"));
+			 
+	   	    
+			  tfJoumouaa.setText( prop.getProperty("joumoua")); 
+		
+			  couleurEnteteText=new Color( Integer.valueOf( prop.getProperty("couleur_nom_mosquee").substring( 1, 3 ), 16 ),   Integer.valueOf( prop.getProperty("couleur_nom_mosquee").substring( 3, 5 ), 16 ), Integer.valueOf( prop.getProperty("couleur_nom_mosquee").substring( 5, 7 ), 16 ) );
+			  couleurEntetePriere=new Color( Integer.valueOf( prop.getProperty("coleur_nom_priere_off").substring( 1, 3 ), 16 ),   Integer.valueOf( prop.getProperty("coleur_nom_priere_off").substring( 3, 5 ), 16 ), Integer.valueOf( prop.getProperty("coleur_nom_priere_off").substring( 5, 7 ), 16 ) );
+			  couleurEntetePriereOn=new Color( Integer.valueOf( prop.getProperty("coleur_nom_priere_on").substring( 1, 3 ), 16 ),   Integer.valueOf( prop.getProperty("coleur_nom_priere_on").substring( 3, 5 ), 16 ), Integer.valueOf( prop.getProperty("coleur_nom_priere_on").substring( 5, 7 ), 16 ) );
+			  couleurHeure=new Color( Integer.valueOf( prop.getProperty("couleurPoliceHeure").substring( 1, 3 ), 16 ),   Integer.valueOf( prop.getProperty("couleurPoliceHeure").substring( 3, 5 ), 16 ), Integer.valueOf( prop.getProperty("couleurPoliceHeure").substring( 5, 7 ), 16 ) );
+			  priereFondCouleur_off=new Color(Integer.valueOf(prop.getProperty("fond_prierre_off_r").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_prierre_off_g").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_prierre_off_b").replace(" ", "")));
+			  priereFondCouleur_on=new Color(Integer.valueOf(prop.getProperty("fond_prierre_on_r").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_prierre_on_g").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_prierre_on_b").replace(" ", "")));
+			  heureFond=new Color(Integer.valueOf(prop.getProperty("fond_heure_on_r").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_heure_on_g").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_heure_on_b").replace(" ", "")));
+			  fondDouaa=new Color(Integer.valueOf(prop.getProperty("fond_douaa_r").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_douaa_g").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_douaa_b").replace(" ", "")));
+			  couleurDouaa=new Color(Integer.valueOf(prop.getProperty("couleur_douaa_r").replace(" ", "")),Integer.valueOf(prop.getProperty("couleur_douaa_g").replace(" ", "")),Integer.valueOf(prop.getProperty("couleur_douaa_b").replace(" ", "")));
+			  fondInfo=new Color(Integer.valueOf(prop.getProperty("fond_info_r").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_info_g").replace(" ", "")),Integer.valueOf(prop.getProperty("fond_info_b").replace(" ", "")));
+			  couleurInfo=new Color(Integer.valueOf(prop.getProperty("couleur_info_r").replace(" ", "")),Integer.valueOf(prop.getProperty("couleur_info_g").replace(" ", "")),Integer.valueOf(prop.getProperty("couleur_info_b").replace(" ", "")));
+	 
+			  	
+		 
+
+	    tfNomMosquee.setText(prop.getProperty("nommosquee"));
+	    tfNomMosquee.setPreferredSize(new Dimension(300, 30));
+	    tfNomMosquee.setHorizontalAlignment(JTextField.RIGHT); 
+	    
+		tfNomVille.setText(prop.getProperty("villemosquee"));
+		tfNomVille.setPreferredSize(new Dimension(300, 30));
+		tfNomVille.setHorizontalAlignment(JTextField.RIGHT); 
+		
+		tfJoumouaa.setPreferredSize(new Dimension(300, 30));
+	    
+		  
+	    labelCouleurTextEntete.setForeground(couleurEnteteText);
+	    labelCouleurTextPriere.setForeground(couleurEntetePriere);
+	    labelCouleurTextPriereOn.setForeground(couleurEntetePriereOn);
+	    labelCouleurTextHeure.setForeground(couleurHeure);
+	    labelPriereFondCouleur_offe.setForeground(priereFondCouleur_off);
+	    labelPriereFondCouleur_on.setForeground(priereFondCouleur_on);
+		labelCouleurHeureFond.setForeground(heureFond);
+		labelCouleurFondDouaaAz.setForeground(fondDouaa);
+		labelCouleurDouaaAz.setForeground(couleurDouaa);
+		labelCouleurFondInfo.setForeground(fondInfo);
+		labelCouleurInfo.setForeground(couleurInfo);
+		 
+	     
+	    
+	    
+	   // comboTypeInfo.addActionListener(new ItemActionType());
+	     
+	    
+	    String[] tab1 = {"كل 5 دقائق"  ,"كل 10 دقائق","كل 15 دقائق","كل 20 دقائق","كل 25 دقائق","كل 30 دقائق","كل 40 دقائق"};
+	    comboDureeInfo=new JComboBox(tab1);
+	    comboDureeInfo.setPreferredSize(new Dimension(200, 25));
+	    int i;
+	    for(  i=0;i<tab1.length;i++){
+	    	if(tab1[i].contains(prop.getProperty("perdiodeInfo").replace(" ", ""))){
+	    		break;
+	    	}
+	    }
+	    comboDureeInfo.setSelectedIndex(i);
+	    ((JLabel) comboDureeInfo.getRenderer()).setHorizontalAlignment(JLabel.RIGHT); 
+	    
+	    String[] tab2 = {"12","13","14"};
+	    comboJoumouaaH=new JComboBox(tab2);
+	    comboJoumouaaH.setPreferredSize(new Dimension(100, 25));
+	     
+	    for(  i=0;i<tab2.length;i++){
+	    	if(tab2[i].equalsIgnoreCase(prop.getProperty("joumouaH").replace(" ", ""))){
+	    		break;
+	    	}
+	    }
+	    comboJoumouaaH.setSelectedIndex(i);
+	    
+	    String[] tab3 = {"00","01","02","03","04","05","06","07","08","09","10","11","12","13","14","15","16","17","18","19","20","22","22","23","24","25","26","27","28","29","30","31","32","33","34","35","36","37","38","39","40","41","42","44","44","45","46","47","48","49","50","51","52","53","54","55","56","57","58","59"};
+	    comboJoumouaaM=new JComboBox(tab3);
+	    for(  i=0;i<tab3.length;i++){
+	    	if(tab3[i].equalsIgnoreCase(prop.getProperty("joumouaM").replace(" ", ""))){
+	    		break;
+	    	}
+	    }
+	    comboJoumouaaM.setSelectedIndex(i);
+	    comboJoumouaaM.setPreferredSize(new Dimension(100, 25));
+	    
+	    String[] tab4 = {"-2","-1","0","+1","+2"};
+	     comboHijir=new JComboBox(tab4);
+	    for(  i=0;i<tab4.length;i++){
+	    	if(tab4[i].equalsIgnoreCase(prop.getProperty("deltaHijir").replace(" ", ""))){
+	    		break;
+	    	}
+	    }
+	   
+	    comboHijir.setSelectedIndex(i);
+	    comboHijir.setPreferredSize(new Dimension(200, 25));
+	    
+	    comboTypeInfo.setPreferredSize(new Dimension(200, 25));
+	     String[] tab5= {"إيقاف","نص موَّحد","نص موَّحد + فضل كل صلاة"};
+	     comboTypeInfo=new JComboBox(tab5);
+	    for(  i=0;i<tab5.length;i++){
+	    	if(i==(Integer.valueOf(prop.getProperty("typeInfo").replace(" ", "")))){
+	    		break;
+	    	}
+	    }
+	   	   
+	    comboTypeInfo.setSelectedIndex(i);
+	    ((JLabel) comboTypeInfo.getRenderer()).setHorizontalAlignment(JLabel.RIGHT);
+	    
+	    Calendar cal = Calendar.getInstance();
+	    cal.setTime(new Date());  
+	    String[] tab6 = {"00","01","02","03","04","05","06","07","08","09","10","11","12","13","14","15","16","17","18","19","20","22","22","23"};
+	    comboDateH=new JComboBox(tab6);
+	    comboDateH.setSelectedIndex(cal.get(Calendar.HOUR_OF_DAY));
+	    comboDateH.setPreferredSize(new Dimension(100, 20));
+	    
+	    String[] tab7 = {"00","01","02","03","04","05","06","07","08","09","10","11","12","13","14","15","16","17","18","19","20","22","22","23","24","25","26","27","28","29","30","31","32","33","34","35","36","37","38","39","40","41","42","44","44","45","46","47","48","49","50","51","52","53","54","55","56","57","58","59"};
+	    comboDateM=new JComboBox(tab7);
+	    comboDateM.setSelectedIndex(cal.get(Calendar.MINUTE));
+	    comboDateM.setPreferredSize(new Dimension(100, 20));
+	    
+	    	    
+	    labelTypeInfo.setFont(new Font("Tahoma", Font.BOLD, 16));
+	    labelDureeInfo.setFont(new Font("Tahoma", Font.BOLD, 16));
+	    labelNomMosquee.setFont(new Font("Tahoma", Font.BOLD, 16));
+	    labelNomVille.setFont(new Font("Tahoma", Font.BOLD, 16));
+	    labelJoumouaa.setFont(new Font("Tahoma", Font.BOLD, 16));
+	    labelHijir.setFont(new Font("Tahoma", Font.BOLD, 16));
+	    labelCouleurTextEntete.setFont(new Font("Tahoma", Font.BOLD, 16));
+	    labelCouleurTextPriere.setFont(new Font("Tahoma", Font.BOLD, 16));
+	    labelHijir.setFont(new Font("Tahoma", Font.BOLD, 16));
+	    labelHijir.setFont(new Font("Tahoma", Font.BOLD, 16));
+	    labelHijir.setFont(new Font("Tahoma", Font.BOLD, 16));
+	    labelCouleurTextPriereOn.setFont(new Font("Tahoma", Font.BOLD, 16));
+	    labelCouleurTextHeure.setFont(new Font("Tahoma", Font.BOLD, 16));
+	    labelPriereFondCouleur_offe.setFont(new Font("Tahoma", Font.BOLD, 16));
+	    labelPriereFondCouleur_on.setFont(new Font("Tahoma", Font.BOLD, 16));
+		labelCouleurHeureFond.setFont(new Font("Tahoma", Font.BOLD, 16));
+		labelCouleurFondDouaaAz.setFont(new Font("Tahoma", Font.BOLD, 16));
+		labelCouleurDouaaAz.setFont(new Font("Tahoma", Font.BOLD, 16));
+		labelCouleurFondInfo.setFont(new Font("Tahoma", Font.BOLD, 16));
+		labelCouleurInfo.setFont(new Font("Tahoma", Font.BOLD, 16));
+		labelDatePick.setFont(new Font("Tahoma", Font.BOLD, 16));
+		
+		b1.setFont(fbouton);
+		b2.setFont(fbouton);
+		b3.setFont(fbouton);
+		b4.setFont(fbouton);
+	    b5.setFont(fbouton);
+	 
+	     
+	    JPanel mosquePan = new JPanel();
+	    JPanel villePan = new JPanel();
+	    JPanel dureePan = new JPanel();
+	    JPanel typePan = new JPanel();
+	    JPanel joumouaaPan = new JPanel();
+	    JPanel hijirPan = new JPanel();
+	    JPanel couTextEntetPan = new JPanel();
+	    JPanel couTextPrierePan = new JPanel();
+	    JPanel couTextPriereOnPan = new JPanel();
+	    JPanel couTextHeurePan = new JPanel();
+	    JPanel priereFondCouleur_offePan = new JPanel();
+	    JPanel priereFondCouleur_onPan = new JPanel();
+	    JPanel couleurHeureFondPan = new JPanel();
+	    JPanel couleurFondDouaaAzPan = new JPanel();
+	    JPanel couleurDouaaAzPan = new JPanel();
+	    JPanel couleurFondInfoPan = new JPanel();
+	    JPanel couleurInfoPan = new JPanel();
+	    JPanel datePickPan = new JPanel();
+	    JPanel datePickspPan = new JPanel();
+	    JPanel validDatePickPan = new JPanel();
+	    
+	    boutonCouleurTextEntete.setFont(fbouton);
+	    boutonCouleurTextPriere.setFont(fbouton);
+	    boutonCouleurTextPriereOn.setFont(fbouton);
+	    boutonCouleurTextHeure.setFont(fbouton);
+	    boutonCouleurHeureFond.setFont(fbouton);
+	    boutonCouleurFondDouaaAz.setFont(fbouton);
+	    boutonCouleurFondInfo.setFont(fbouton);
+	    boutonCouleurInfo.setFont(fbouton);
+	    
+	    boutonCouleurDouaaAz.setFont(fbouton);
+	    boutonPriereFondCouleur_off.setFont(fbouton);
+	    boutonPriereFondCouleur_on.setFont(fbouton);
+	   
+	 
+		  
+	   
+	    JPanel bas = new JPanel();
+	   
+	    
+	    
+	    bas.setPreferredSize(new Dimension(10, 10));
+	    
+	    mosquePan.setBackground(new Color(198,199,199));
+	    villePan.setBackground(Color.WHITE);
+	    dureePan.setBackground(new Color(198,199,199));
+	    typePan.setBackground(Color.WHITE);
+	    joumouaaPan.setBackground(new Color(198,199,199));
+	    hijirPan.setBackground(new Color(198,199,199));
+	    couTextHeurePan.setBackground(new Color(198,199,199));
+	    couTextEntetPan.setBackground(Color.WHITE);
+	    couTextPriereOnPan.setBackground(new Color(198,199,199));
+	    couTextPrierePan.setBackground(new Color(198,199,199));
+	    priereFondCouleur_offePan .setBackground(Color.WHITE);  
+	    priereFondCouleur_onPan .setBackground(Color.WHITE );
+	    couleurHeureFondPan .setBackground(Color.WHITE );
+	    couleurFondDouaaAzPan .setBackground( Color.WHITE);
+	    couleurDouaaAzPan .setBackground(new Color(198,199,199) );
+	    couleurFondInfoPan .setBackground(Color.WHITE );
+	    couleurInfoPan .setBackground( new Color(198,199,199));
+	    datePickPan .setBackground(Color.WHITE);
+	   
+	    
+	    bas.setBackground(new Color(244,131,1));
+	    validDatePickPan.setBackground(new Color(244,131,1));
+	  
+	     
+	    mosquePan.add(tfNomMosquee);
+	    mosquePan.add(labelNomMosquee);
+	    container.add(mosquePan );
+	     
+	    villePan.add(tfNomVille);
+	    villePan.add(labelNomVille);
+	    container.add(villePan );
+	    
+	    dureePan.add(comboTypeInfo);
+	    dureePan.add(labelTypeInfo);
+	    container.add(dureePan );
+	    
+	    typePan.add(comboDureeInfo);
+	    typePan.add(labelDureeInfo);
+	    container.add(typePan );
+	    
+	    joumouaaPan.add(comboJoumouaaH);
+	    joumouaaPan.add(comboJoumouaaM);
+	    joumouaaPan.add(labelJoumouaa);
+	    container.add(joumouaaPan );
+	        
+	    couTextEntetPan.add(boutonCouleurTextEntete);
+	    couTextEntetPan.add(labelCouleurTextEntete);
+	    container.add(couTextEntetPan ); 
+	    
+	    couTextHeurePan.add(boutonCouleurTextHeure);
+	    couTextHeurePan.add(labelCouleurTextHeure);
+	    container.add(couTextHeurePan );
+	    
+	    couleurHeureFondPan .add( boutonCouleurHeureFond);
+	     couleurHeureFondPan .add( labelCouleurHeureFond);
+	     container.add(couleurHeureFondPan );
+	 
+	    
+	    couTextPriereOnPan.add(boutonCouleurTextPriereOn);
+	    couTextPriereOnPan.add(labelCouleurTextPriereOn);
+	    container.add(couTextPriereOnPan );
+
+	     priereFondCouleur_onPan .add(boutonPriereFondCouleur_on);
+	     priereFondCouleur_onPan .add(labelPriereFondCouleur_on);
+	     container.add(priereFondCouleur_onPan );
+	    
+	     couTextPrierePan.add(boutonCouleurTextPriere);
+	     couTextPrierePan.add(labelCouleurTextPriere);
+	     container.add(couTextPrierePan );
+		    
+	    priereFondCouleur_offePan .add(boutonPriereFondCouleur_off );
+	    priereFondCouleur_offePan .add( labelPriereFondCouleur_offe); 
+	    container.add(priereFondCouleur_offePan );
+	    
+	     
+	     
+	    couleurDouaaAzPan .add( boutonCouleurDouaaAz);
+	     couleurDouaaAzPan .add(labelCouleurDouaaAz );
+	     container.add(couleurDouaaAzPan );
+	      
+	     
+	     couleurFondDouaaAzPan .add( boutonCouleurFondDouaaAz );
+	     couleurFondDouaaAzPan .add( labelCouleurFondDouaaAz );
+	     container.add(couleurFondDouaaAzPan );
+	     
+	     couleurInfoPan .add( boutonCouleurInfo);
+	     couleurInfoPan .add( labelCouleurInfo);
+	     container.add(couleurInfoPan );
+	     
+	     couleurFondInfoPan .add(boutonCouleurFondInfo);
+	     couleurFondInfoPan .add(labelCouleurFondInfo);
+	     container.add(couleurFondInfoPan );
+	     
+	     hijirPan.add(comboHijir);
+		 hijirPan.add(labelHijir);
+		 container.add(hijirPan );  
+ 
+		 bas.add(b4 );
+	     bas.add(b3 );  
+	     bas.add(b2 );
+	     bas.add(b1 );
+	    
+	     container.add(bas );
+		 
+	     UtilDateModel model = new UtilDateModel();
+	     prop.put("text.today", "Aujourd'hui");
+	     prop.put("text.month", "Mois");
+	     prop.put("text.year", "Année");
+	     model.setSelected(true);
+	     JDatePanelImpl datePanel = new JDatePanelImpl(model, prop);
+	     datePicker = new JDatePickerImpl(datePanel, new DateLabelFormatter());
+	     datePickPan.add(new JLabel("دقيقة")); 
+	     datePickPan.add(comboDateM); 
+	     datePickPan.add(new JLabel("و")); 
+	     datePickPan.add(comboDateH); 
+	     datePickPan.add(new JLabel("الساعة")); 
+	     datePickPan.add(datePicker); 
+	     datePickPan.add(labelDatePick);
+	     
+	     container.add(datePickPan); 
+	     
+	     validDatePickPan.add(b5 );
+	     container.add(validDatePickPan);
+	     container.add(datePickspPan);  
+	       
+		  
+	     
+	     JScrollPane jsp = new JScrollPane(container);
+	     
+	     
+	    this.setContentPane(jsp);
+	    this.setVisible(true);  
+	   
+	    
+	}
+
+	public static void main(String[] args) throws IOException, AWTException {
+		 
+		new Admin();
+	}
+
+	String remplirFichierTmp( ) {
+		String s=FichierPropreties.contenu_tmp;
+    	
+    	s=s.replace("$nommosquee", tfNomMosquee.getText());
+    	s=s.replace("$villemosquee", tfNomVille.getText());
+    	s=s.replace("$perdiodeInfo", comboDureeInfo.getSelectedItem().toString().substring(3, 5));
+    	s=s.replace("$typeInfo",  String.valueOf(comboTypeInfo.getSelectedIndex()));
+    	s=s.replace("$joumouaH",  comboJoumouaaH.getSelectedItem().toString());
+    	s=s.replace("$joumouaM",  comboJoumouaaM.getSelectedItem().toString());
+    	s=s.replace("$joumoua", "صلاة الجمعة على الساعة " +comboJoumouaaH.getSelectedItem().toString()+":"+comboJoumouaaM.getSelectedItem().toString()  );
+    	s=s.replace("$deltaHijir",  comboHijir.getSelectedItem().toString());
+    	s=s.replace("$couleur_nom_mosquee", String.format("#%02x%02x%02x", couleurEnteteText.getRed(), couleurEnteteText.getGreen(), couleurEnteteText.getBlue()) );  
+    	s=s.replace("$coleur_nom_priere_off", String.format("#%02x%02x%02x", couleurEntetePriere.getRed(), couleurEntetePriere.getGreen(), couleurEntetePriere.getBlue()) );
+    	s=s.replace("$coleur_nom_priere_on", String.format("#%02x%02x%02x", couleurEntetePriereOn.getRed(), couleurEntetePriereOn.getGreen(), couleurEntetePriereOn.getBlue()) );
+    	s=s.replace("$couleurPoliceHeure", String.format("#%02x%02x%02x", couleurHeure.getRed(), couleurHeure.getGreen(), couleurHeure.getBlue()) );
+    	s=s.replace("$fond_prierre_off_r",  String.valueOf(priereFondCouleur_off.getRed()));
+    	s=s.replace("$fond_prierre_off_g",   String.valueOf(priereFondCouleur_off.getGreen()) );
+    	s=s.replace("$fond_prierre_off_b",   String.valueOf(priereFondCouleur_off.getBlue()));
+    	s=s.replace("$fond_prierre_on_r",  String.valueOf(priereFondCouleur_on.getRed()));
+    	s=s.replace("$fond_prierre_on_g",   String.valueOf(priereFondCouleur_on.getGreen()) );
+    	s=s.replace("$fond_prierre_on_b",   String.valueOf(priereFondCouleur_on.getBlue()));
+    	s=s.replace("$fond_heure_on_r",  String.valueOf(heureFond.getRed()));
+    	s=s.replace("$fond_heure_on_g",   String.valueOf(heureFond.getGreen()) );
+    	s=s.replace("$fond_heure_on_b",   String.valueOf(heureFond.getBlue()));
+    	s=s.replace("$fond_douaa_r",  String.valueOf(fondDouaa.getRed()));
+    	s=s.replace("$fond_douaa_g",   String.valueOf(fondDouaa.getGreen()) );
+    	s=s.replace("$fond_douaa_b",   String.valueOf(fondDouaa.getBlue()));
+    	s=s.replace("$couleur_douaa_r",  String.valueOf(couleurDouaa.getRed()));
+    	s=s.replace("$couleur_douaa_g",   String.valueOf(couleurDouaa.getGreen()) );
+    	s=s.replace("$couleur_douaa_b",   String.valueOf(couleurDouaa.getBlue()));
+    	s=s.replace("$fond_info_r",  String.valueOf(fondInfo.getRed()));
+    	s=s.replace("$fond_info_g",   String.valueOf(fondInfo.getGreen()) );
+    	s=s.replace("$fond_info_b",   String.valueOf(fondInfo.getBlue()));
+    	s=s.replace("$couleur_info_r",  String.valueOf(couleurInfo.getRed()));
+    	s=s.replace("$couleur_info_g",   String.valueOf(couleurInfo.getGreen()) );
+    	s=s.replace("$couleur_info_b",   String.valueOf(couleurInfo.getBlue()));
+    	
+    	return s;
+    	
+	}
+
+}
