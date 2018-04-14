@@ -309,6 +309,20 @@ if(type!=null)
 			if (tempsNow < 2) {
 				try {
 					extraireInfosJour();
+					
+					miseEnFormePanelPrieres(false);
+					contentPane.removeAll();
+					contentPane = f.getContentPane();
+					contentPane.setLayout(new BorderLayout());
+					Entete = new EntetePanel().mettreEnForme(image_v,  mosquee ,hEcran ,heureFond );
+					contentPane.add(Entete, BorderLayout.PAGE_START);
+					contentPane.add(panelPrieres, BorderLayout.CENTER);
+					contentPane.add(DateHeure, BorderLayout.PAGE_END);
+					contentPane.repaint();
+					contentPane.revalidate();
+					f.setExtendedState(JFrame.MAXIMIZED_BOTH);
+					f.setVisible(true);
+										
 				} catch (IOException e1) {
 					// TODO Auto-generated catch block
 					e1.printStackTrace();
@@ -333,6 +347,7 @@ if(type!=null)
 			}
 
 			miseEnFormePanelPrieres(false);
+		 
 
 			if (salatNow != null) {
 				panelAzane = new AzanePanel().mettreEnForme(image_azane,hEcran );
