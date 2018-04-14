@@ -226,6 +226,20 @@ public class JPanelTexteDefilant extends JPanel {
 		}
 	}
 	
+	public static void endScrollingText()  
+		 {
+		
+			   
+			 try {
+				stream.close();
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			 stream = null;
+				 
+		 }
+	
 	/**
 	 * Initialisation graphique
 	 * @param espaceGauche - int - espace du bord gauche

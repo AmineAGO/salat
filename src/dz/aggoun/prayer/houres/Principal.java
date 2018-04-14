@@ -373,6 +373,7 @@ if(type!=null)
 					contentPane.remove(panelAzane);
 					
 					JPanelTexteDefilant.scrollingText("Douaa", f,couleurDouaa,fondDouaa); 
+					 
 										
 					contentPane.revalidate();
 					f.setExtendedState(JFrame.MAXIMIZED_BOTH);
@@ -385,6 +386,7 @@ if(type!=null)
 				
 				try {
 					Thread.sleep(60000);
+					JPanelTexteDefilant.endScrollingText();
 					contentPane.removeAll();
 					contentPane = f.getContentPane();
 					contentPane.setLayout(new BorderLayout());
@@ -492,7 +494,9 @@ if(type!=null)
 						
 						infoApresInfo=0;
 					}
+					
 					contentPane.removeAll();
+					JPanelTexteDefilant.endScrollingText();
 					contentPane = f.getContentPane();
 					contentPane.setLayout(new BorderLayout());
 					miseEnFormePanelPrieres(false);
